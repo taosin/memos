@@ -10,7 +10,6 @@ import (
 
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/bcrypt"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -22,6 +21,7 @@ import (
 	"github.com/usememos/memos/plugin/idp/oauth2"
 	v1pb "github.com/usememos/memos/proto/gen/api/v1"
 	storepb "github.com/usememos/memos/proto/gen/store"
+	"github.com/usememos/memos/server/auth"
 	"github.com/usememos/memos/store"
 )
 
@@ -53,7 +53,7 @@ func (s *APIV1Service) GetCurrentSession(ctx context.Context, _ *v1pb.GetCurrent
 
 	var lastAccessedAt *timestamppb.Timestamp
 	// Update session last accessed time if we have a session ID and get the current session info
-	if sessionID, ok := ctx.Value(sessionIDContextKey).(string); ok && sessionID != "" {
+	if sessionID := auth.GetSessionID(ctx); sessionID != "" {
 		now := timestamppb.Now()
 		if err := s.Store.UpdateUserSessionLastAccessed(ctx, user.ID, sessionID, now); err != nil {
 			// Log error but don't fail the request
@@ -221,10 +221,7 @@ func (s *APIV1Service) CreateSession(ctx context.Context, request *v1pb.CreateSe
 // sliding expiration (14 days from last access) checked during authentication.
 func (s *APIV1Service) doSignIn(ctx context.Context, user *store.User, expireTime time.Time) error {
 	// Generate unique session ID for web use
-	sessionID, err := GenerateSessionID()
-	if err != nil {
-		return status.Errorf(codes.Internal, "failed to generate session ID, error: %v", err)
-	}
+	sessionID := auth.GenerateSessionID()
 
 	// Track session in user settings
 	if err := s.trackUserSession(ctx, user.ID, sessionID); err != nil {
@@ -234,15 +231,13 @@ func (s *APIV1Service) doSignIn(ctx context.Context, user *store.User, expireTim
 	}
 
 	// Set session cookie for web use (format: userID-sessionID)
-	sessionCookieValue := BuildSessionCookieValue(user.ID, sessionID)
+	sessionCookieValue := auth.BuildSessionCookieValue(user.ID, sessionID)
 	sessionCookie, err := s.buildSessionCookie(ctx, sessionCookieValue, expireTime)
 	if err != nil {
 		return status.Errorf(codes.Internal, "failed to build session cookie, error: %v", err)
 	}
-	if err := grpc.SetHeader(ctx, metadata.New(map[string]string{
-		"Set-Cookie": sessionCookie,
-	})); err != nil {
-		return status.Errorf(codes.Internal, "failed to set grpc header, error: %v", err)
+	if err := SetResponseHeader(ctx, "Set-Cookie", sessionCookie); err != nil {
+		return status.Errorf(codes.Internal, "failed to set response header, error: %v", err)
 	}
 
 	return nil
@@ -266,7 +261,7 @@ func (s *APIV1Service) DeleteSession(ctx context.Context, _ *v1pb.DeleteSessionR
 	}
 
 	// Check if we have a session ID (from cookie-based auth)
-	if sessionID, ok := ctx.Value(sessionIDContextKey).(string); ok && sessionID != "" {
+	if sessionID := auth.GetSessionID(ctx); sessionID != "" {
 		// Remove session from user settings
 		if err := s.Store.RemoveUserSession(ctx, user.ID, sessionID); err != nil {
 			slog.Error("failed to remove user session", "error", err)
@@ -286,18 +281,16 @@ func (s *APIV1Service) clearAuthCookies(ctx context.Context) error {
 		return errors.Wrap(err, "failed to build session cookie")
 	}
 
-	// Set both cookies in the response
-	if err := grpc.SetHeader(ctx, metadata.New(map[string]string{
-		"Set-Cookie": sessionCookie,
-	})); err != nil {
-		return errors.Wrap(err, "failed to set grpc header")
+	// Set cookie in the response
+	if err := SetResponseHeader(ctx, "Set-Cookie", sessionCookie); err != nil {
+		return errors.Wrap(err, "failed to set response header")
 	}
 	return nil
 }
 
 func (*APIV1Service) buildSessionCookie(ctx context.Context, sessionCookieValue string, expireTime time.Time) (string, error) {
 	attrs := []string{
-		fmt.Sprintf("%s=%s", SessionCookieName, sessionCookieValue),
+		fmt.Sprintf("%s=%s", auth.SessionCookieName, sessionCookieValue),
 		"Path=/",
 		"HttpOnly",
 	}
@@ -307,15 +300,18 @@ func (*APIV1Service) buildSessionCookie(ctx context.Context, sessionCookieValue 
 		attrs = append(attrs, "Expires="+expireTime.Format(time.RFC1123))
 	}
 
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return "", errors.New("failed to get metadata from context")
+	// Try to determine if the request is HTTPS by checking the origin header
+	// Default to non-HTTPS (Strict SameSite) if metadata is not available
+	isHTTPS := false
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		for _, v := range md.Get("origin") {
+			if strings.HasPrefix(v, "https://") {
+				isHTTPS = true
+				break
+			}
+		}
 	}
-	var origin string
-	for _, v := range md.Get("origin") {
-		origin = v
-	}
-	isHTTPS := strings.HasPrefix(origin, "https://")
+
 	if isHTTPS {
 		attrs = append(attrs, "SameSite=None")
 		attrs = append(attrs, "Secure")
@@ -326,8 +322,8 @@ func (*APIV1Service) buildSessionCookie(ctx context.Context, sessionCookieValue 
 }
 
 func (s *APIV1Service) GetCurrentUser(ctx context.Context) (*store.User, error) {
-	userID, ok := ctx.Value(UserIDContextKey).(int32)
-	if !ok {
+	userID := auth.GetUserID(ctx)
+	if userID == 0 {
 		return nil, nil
 	}
 	user, err := s.Store.GetUser(ctx, &store.FindUser{
