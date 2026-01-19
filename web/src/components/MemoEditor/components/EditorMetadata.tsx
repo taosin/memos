@@ -1,22 +1,16 @@
 import type { FC } from "react";
-import { AttachmentList, LocationDisplay, RelationList } from "@/components/memo-metadata";
 import { useEditorContext } from "../state";
+import type { EditorMetadataProps } from "../types";
+import AttachmentList from "./AttachmentList";
+import LocationDisplay from "./LocationDisplay";
+import RelationList from "./RelationList";
 
-export const EditorMetadata: FC = () => {
+export const EditorMetadata: FC<EditorMetadataProps> = ({ memoName }) => {
   const { state, actions, dispatch } = useEditorContext();
 
   return (
     <div className="w-full flex flex-col gap-2">
-      {state.metadata.location && (
-        <LocationDisplay
-          mode="edit"
-          location={state.metadata.location}
-          onRemove={() => dispatch(actions.setMetadata({ location: undefined }))}
-        />
-      )}
-
       <AttachmentList
-        mode="edit"
         attachments={state.metadata.attachments}
         localFiles={state.localFiles}
         onAttachmentsChange={(attachments) => dispatch(actions.setMetadata({ attachments }))}
@@ -24,11 +18,14 @@ export const EditorMetadata: FC = () => {
       />
 
       <RelationList
-        mode="edit"
         relations={state.metadata.relations}
-        currentMemoName=""
         onRelationsChange={(relations) => dispatch(actions.setMetadata({ relations }))}
+        memoName={memoName}
       />
+
+      {state.metadata.location && (
+        <LocationDisplay location={state.metadata.location} onRemove={() => dispatch(actions.setMetadata({ location: undefined }))} />
+      )}
     </div>
   );
 };

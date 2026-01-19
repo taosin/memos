@@ -1,5 +1,6 @@
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import { BookmarkIcon, EyeOffIcon, MessageCircleMoreIcon } from "lucide-react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import i18n from "@/i18n";
@@ -12,21 +13,10 @@ import MemoActionMenu from "../../MemoActionMenu";
 import { ReactionSelector } from "../../MemoReactionListView";
 import UserAvatar from "../../UserAvatar";
 import VisibilityIcon from "../../VisibilityIcon";
-import { useMemoViewContext } from "../MemoViewContext";
+import { useMemoViewContext, useMemoViewDerived } from "../MemoViewContext";
+import type { MemoHeaderProps } from "../types";
 
-interface Props {
-  showCreator?: boolean;
-  showVisibility?: boolean;
-  showPinned?: boolean;
-  onEdit: () => void;
-  onGotoDetail: () => void;
-  onUnpin: () => void;
-  onToggleNsfwVisibility?: () => void;
-  reactionSelectorOpen: boolean;
-  onReactionSelectorOpenChange: (open: boolean) => void;
-}
-
-const MemoHeader: React.FC<Props> = ({
+const MemoHeader: React.FC<MemoHeaderProps> = ({
   showCreator,
   showVisibility,
   showPinned,
@@ -34,14 +24,12 @@ const MemoHeader: React.FC<Props> = ({
   onGotoDetail,
   onUnpin,
   onToggleNsfwVisibility,
-  reactionSelectorOpen,
-  onReactionSelectorOpenChange,
 }) => {
   const t = useTranslate();
+  const [reactionSelectorOpen, setReactionSelectorOpen] = useState(false);
 
-  // Get shared state from context
-  const { memo, creator, isArchived, commentAmount, isInMemoDetailPage, parentPage, readonly, relativeTimeFormat, nsfw, showNSFWContent } =
-    useMemoViewContext();
+  const { memo, creator, currentUser, parentPage, isArchived, readonly, showNSFWContent, nsfw } = useMemoViewContext();
+  const { isInMemoDetailPage, commentAmount, relativeTimeFormat } = useMemoViewDerived();
 
   const displayTime = isArchived ? (
     (memo.displayTime ? timestampDate(memo.displayTime) : undefined)?.toLocaleString(i18n.language)
@@ -55,7 +43,6 @@ const MemoHeader: React.FC<Props> = ({
 
   return (
     <div className="w-full flex flex-row justify-between items-center gap-2">
-      {/* Left section: Creator info or time */}
       <div className="w-auto max-w-[calc(100%-8rem)] grow flex flex-row justify-start items-center">
         {showCreator && creator ? (
           <CreatorDisplay creator={creator} displayTime={displayTime} onGotoDetail={onGotoDetail} />
@@ -64,34 +51,27 @@ const MemoHeader: React.FC<Props> = ({
         )}
       </div>
 
-      {/* Right section: Actions */}
       <div className="flex flex-row justify-end items-center select-none shrink-0 gap-2">
-        {/* Reaction selector */}
-        {!isArchived && (
+        {currentUser && !isArchived && (
           <ReactionSelector
-            className={cn("border-none w-auto h-auto", reactionSelectorOpen && "block!", "hidden group-hover:block")}
+            className={cn("border-none w-auto h-auto", reactionSelectorOpen && "block!", "block sm:hidden sm:group-hover:block")}
             memo={memo}
-            onOpenChange={onReactionSelectorOpenChange}
+            onOpenChange={setReactionSelectorOpen}
           />
         )}
 
-        {/* Comment count link */}
-        {!isInMemoDetailPage && (
+        {!isInMemoDetailPage && commentAmount > 0 && (
           <Link
-            className={cn(
-              "flex flex-row justify-start items-center rounded-md p-1 hover:opacity-80",
-              commentAmount === 0 && "invisible group-hover:visible",
-            )}
+            className={cn("flex flex-row justify-start items-center rounded-md px-1 hover:opacity-80 gap-0.5")}
             to={`/${memo.name}#comments`}
             viewTransition
             state={{ from: parentPage }}
           >
             <MessageCircleMoreIcon className="w-4 h-4 mx-auto text-muted-foreground" />
-            {commentAmount > 0 && <span className="text-xs text-muted-foreground">{commentAmount}</span>}
+            <span className="text-xs text-muted-foreground">{commentAmount}</span>
           </Link>
         )}
 
-        {/* Visibility icon */}
         {showVisibility && memo.visibility !== Visibility.PRIVATE && (
           <Tooltip>
             <TooltipTrigger>
@@ -105,7 +85,6 @@ const MemoHeader: React.FC<Props> = ({
           </Tooltip>
         )}
 
-        {/* Pinned indicator */}
         {showPinned && memo.pinned && (
           <TooltipProvider>
             <Tooltip>
@@ -121,14 +100,12 @@ const MemoHeader: React.FC<Props> = ({
           </TooltipProvider>
         )}
 
-        {/* NSFW hide button */}
         {nsfw && showNSFWContent && onToggleNsfwVisibility && (
           <span className="cursor-pointer">
             <EyeOffIcon className="w-4 h-auto text-primary" onClick={onToggleNsfwVisibility} />
           </span>
         )}
 
-        {/* Action menu */}
         <MemoActionMenu memo={memo} readonly={readonly} onEdit={onEdit} />
       </div>
     </div>

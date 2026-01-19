@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { instanceStore } from "@/store";
 import type { Memo } from "@/types/proto/api/v1/memo_service_pb";
 
 export interface UseNsfwContentReturn {
@@ -10,14 +9,12 @@ export interface UseNsfwContentReturn {
 
 export const useNsfwContent = (memo: Memo, initialShowNsfw?: boolean): UseNsfwContentReturn => {
   const [showNSFWContent, setShowNSFWContent] = useState(initialShowNsfw ?? false);
-  const instanceMemoRelatedSetting = instanceStore.state.memoRelatedSetting;
 
-  const nsfw =
-    instanceMemoRelatedSetting.enableBlurNsfwContent &&
-    memo.tags?.some((tag) => instanceMemoRelatedSetting.nsfwTags.some((nsfwTag) => tag === nsfwTag || tag.startsWith(`${nsfwTag}/`)));
+  // Always blur content tagged with NSFW
+  const nsfw = memo.tags?.includes("NSFW") ?? false;
 
   return {
-    nsfw: nsfw ?? false,
+    nsfw,
     showNSFWContent,
     toggleNsfwVisibility: () => setShowNSFWContent((prev) => !prev),
   };
