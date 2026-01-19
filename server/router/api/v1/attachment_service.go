@@ -6,6 +6,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"mime"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -21,6 +23,7 @@ import (
 
 	"github.com/usememos/memos/internal/profile"
 	"github.com/usememos/memos/internal/util"
+	"github.com/usememos/memos/plugin/filter"
 	"github.com/usememos/memos/plugin/storage/s3"
 	v1pb "github.com/usememos/memos/proto/gen/api/v1"
 	storepb "github.com/usememos/memos/proto/gen/store"
@@ -62,7 +65,19 @@ func (s *APIV1Service) CreateAttachment(ctx context.Context, request *v1pb.Creat
 		return nil, status.Errorf(codes.InvalidArgument, "filename contains invalid characters or format")
 	}
 	if request.Attachment.Type == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "type is required")
+		ext := filepath.Ext(request.Attachment.Filename)
+		mimeType := mime.TypeByExtension(ext)
+		if mimeType == "" {
+			mimeType = http.DetectContentType(request.Attachment.Content)
+		}
+		// ParseMediaType to strip parameters
+		mediaType, _, err := mime.ParseMediaType(mimeType)
+		if err == nil {
+			request.Attachment.Type = mediaType
+		}
+	}
+	if request.Attachment.Type == "" {
+		request.Attachment.Type = "application/octet-stream"
 	}
 	if !isValidMimeType(request.Attachment.Type) {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid MIME type format")
@@ -154,6 +169,14 @@ func (s *APIV1Service) ListAttachments(ctx context.Context, request *v1pb.ListAt
 		CreatorID: &user.ID,
 		Limit:     &pageSize,
 		Offset:    &offset,
+	}
+
+	// Parse filter if provided
+	if request.Filter != "" {
+		if err := s.validateAttachmentFilter(ctx, request.Filter); err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid filter: %v", err)
+		}
+		findAttachment.Filters = append(findAttachment.Filters, request.Filter)
 	}
 
 	attachments, err := s.Store.ListAttachments(ctx, findAttachment)
@@ -308,11 +331,6 @@ func SaveAttachmentBlob(ctx context.Context, profile *profile.Profile, stores *s
 		if err = os.MkdirAll(dir, os.ModePerm); err != nil {
 			return errors.Wrap(err, "Failed to create directory")
 		}
-		dst, err := os.Create(osPath)
-		if err != nil {
-			return errors.Wrap(err, "Failed to create file")
-		}
-		defer dst.Close()
 
 		// Write the blob to the file.
 		if err := os.WriteFile(osPath, create.Blob, 0644); err != nil {
@@ -471,4 +489,30 @@ func isValidMimeType(mimeType string) bool {
 	// Allow common characters in MIME types per RFC 2045
 	matched, _ := regexp.MatchString(`^[a-zA-Z0-9][a-zA-Z0-9!#$&^_.+-]{0,126}/[a-zA-Z0-9][a-zA-Z0-9!#$&^_.+-]{0,126}$`, mimeType)
 	return matched
+}
+
+func (s *APIV1Service) validateAttachmentFilter(ctx context.Context, filterStr string) error {
+	if filterStr == "" {
+		return errors.New("filter cannot be empty")
+	}
+
+	engine, err := filter.DefaultAttachmentEngine()
+	if err != nil {
+		return err
+	}
+
+	var dialect filter.DialectName
+	switch s.Profile.Driver {
+	case "mysql":
+		dialect = filter.DialectMySQL
+	case "postgres":
+		dialect = filter.DialectPostgres
+	default:
+		dialect = filter.DialectSQLite
+	}
+
+	if _, err := engine.CompileToStatement(ctx, filterStr, filter.RenderOptions{Dialect: dialect}); err != nil {
+		return errors.Wrap(err, "failed to compile filter")
+	}
+	return nil
 }

@@ -1,9 +1,9 @@
 import { LatLng } from "leaflet";
 import { uniqBy } from "lodash-es";
 import { FileIcon, LinkIcon, LoaderIcon, MapPinIcon, Maximize2Icon, MoreHorizontalIcon, PlusIcon } from "lucide-react";
-import { observer } from "mobx-react-lite";
-import { useContext, useState } from "react";
-import type { LocalFile } from "@/components/memo-metadata";
+import { useEffect, useState } from "react";
+import { useDebounce } from "react-use";
+import { useReverseGeocoding } from "@/components/map";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -15,31 +15,21 @@ import {
   DropdownMenuTrigger,
   useDropdownMenuSubHoverDelay,
 } from "@/components/ui/dropdown-menu";
-import type { Location, MemoRelation } from "@/types/proto/api/v1/memo_service_pb";
+import type { MemoRelation } from "@/types/proto/api/v1/memo_service_pb";
 import { useTranslate } from "@/utils/i18n";
 import { LinkMemoDialog, LocationDialog } from "../components";
-import { GEOCODING } from "../constants";
 import { useFileUpload, useLinkMemo, useLocation } from "../hooks";
-import { useAbortController } from "../hooks/useAbortController";
-import { MemoEditorContext } from "../types";
+import { useEditorContext } from "../state";
+import type { InsertMenuProps } from "../types";
+import type { LocalFile } from "../types/attachment";
 
-interface Props {
-  isUploading?: boolean;
-  location?: Location;
-  onLocationChange: (location?: Location) => void;
-  onToggleFocusMode?: () => void;
-}
-
-const InsertMenu = observer((props: Props) => {
+const InsertMenu = (props: InsertMenuProps) => {
   const t = useTranslate();
-  const context = useContext(MemoEditorContext);
+  const { state, actions, dispatch } = useEditorContext();
 
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [locationDialogOpen, setLocationDialogOpen] = useState(false);
   const [moreSubmenuOpen, setMoreSubmenuOpen] = useState(false);
-
-  // Abort controller for canceling geocoding requests
-  const { abort: abortGeocoding, abortAndCreate: createGeocodingSignal } = useAbortController();
 
   const { handleTriggerEnter, handleTriggerLeave, handleContentEnter, handleContentLeave } = useDropdownMenuSubHoverDelay(
     150,
@@ -47,22 +37,38 @@ const InsertMenu = observer((props: Props) => {
   );
 
   const { fileInputRef, selectingFlag, handleFileInputChange, handleUploadClick } = useFileUpload((newFiles: LocalFile[]) => {
-    if (context.addLocalFiles) {
-      context.addLocalFiles(newFiles);
-    }
+    newFiles.forEach((file) => dispatch(actions.addLocalFile(file)));
   });
 
   const linkMemo = useLinkMemo({
     isOpen: linkDialogOpen,
-    currentMemoName: context.memoName,
-    existingRelations: context.relationList,
+    currentMemoName: props.memoName,
+    existingRelations: state.metadata.relations,
     onAddRelation: (relation: MemoRelation) => {
-      context.setRelationList(uniqBy([...context.relationList, relation], (r) => r.relatedMemo?.name));
+      dispatch(actions.setMetadata({ relations: uniqBy([...state.metadata.relations, relation], (r) => r.relatedMemo?.name) }));
       setLinkDialogOpen(false);
     },
   });
 
   const location = useLocation(props.location);
+
+  const [debouncedPosition, setDebouncedPosition] = useState<LatLng | undefined>(undefined);
+
+  useDebounce(
+    () => {
+      setDebouncedPosition(location.state.position);
+    },
+    1000,
+    [location.state.position],
+  );
+
+  const { data: displayName } = useReverseGeocoding(debouncedPosition?.lat, debouncedPosition?.lng);
+
+  useEffect(() => {
+    if (displayName) {
+      location.setPlaceholder(displayName);
+    }
+  }, [displayName]);
 
   const isUploading = selectingFlag || props.isUploading;
 
@@ -91,56 +97,12 @@ const InsertMenu = observer((props: Props) => {
   };
 
   const handleLocationCancel = () => {
-    abortGeocoding();
     location.reset();
     setLocationDialogOpen(false);
   };
 
-  const fetchReverseGeocode = async (position: LatLng, signal: AbortSignal): Promise<string> => {
-    const coordString = `${position.lat.toFixed(6)}, ${position.lng.toFixed(6)}`;
-    try {
-      const url = `${GEOCODING.endpoint}?lat=${position.lat}&lon=${position.lng}&format=${GEOCODING.format}`;
-      const response = await fetch(url, {
-        headers: {
-          "User-Agent": GEOCODING.userAgent,
-          Accept: "application/json",
-        },
-        signal,
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data?.display_name || coordString;
-    } catch (error) {
-      // Silently return coordinates for abort errors
-      if (error instanceof Error && error.name === "AbortError") {
-        throw error; // Re-throw to handle in caller
-      }
-      console.error("Failed to fetch reverse geocoding data:", error);
-      return coordString;
-    }
-  };
-
   const handlePositionChange = (position: LatLng) => {
     location.handlePositionChange(position);
-
-    // Abort previous and create new signal for this request
-    const signal = createGeocodingSignal();
-
-    fetchReverseGeocode(position, signal)
-      .then((displayName) => {
-        location.setPlaceholder(displayName);
-      })
-      .catch((error) => {
-        // Ignore abort errors (user canceled the request)
-        if (error.name !== "AbortError") {
-          // Set coordinate fallback for other errors
-          location.setPlaceholder(`${position.lat.toFixed(6)}, ${position.lng.toFixed(6)}`);
-        }
-      });
   };
 
   return (
@@ -221,6 +183,6 @@ const InsertMenu = observer((props: Props) => {
       />
     </>
   );
-});
+};
 
 export default InsertMenu;

@@ -1,5 +1,4 @@
-import { LatLng } from "leaflet";
-import LeafletMap from "@/components/LeafletMap";
+import { LocationPicker } from "@/components/map";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -7,25 +6,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { VisuallyHidden } from "@/components/ui/visually-hidden";
 import { useTranslate } from "@/utils/i18n";
-import { LocationState } from "../types/insert-menu";
-
-interface LocationDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  state: LocationState;
-  locationInitialized: boolean;
-  onPositionChange: (position: LatLng) => void;
-  onUpdateCoordinate: (type: "lat" | "lng", value: string) => void;
-  onPlaceholderChange: (value: string) => void;
-  onCancel: () => void;
-  onConfirm: () => void;
-}
+import type { LocationDialogProps } from "../types";
 
 export const LocationDialog = ({
   open,
   onOpenChange,
   state,
-  locationInitialized,
+  locationInitialized: _locationInitialized,
   onPositionChange,
   onUpdateCoordinate,
   onPlaceholderChange,
@@ -37,7 +24,7 @@ export const LocationDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[min(28rem,calc(100vw-2rem))] !p-0">
+      <DialogContent className="max-w-[min(28rem,calc(100vw-2rem))] p-0!">
         <VisuallyHidden>
           <DialogClose />
         </VisuallyHidden>
@@ -49,12 +36,12 @@ export const LocationDialog = ({
         </VisuallyHidden>
         <div className="flex flex-col">
           <div className="w-full h-64 overflow-hidden rounded-t-md bg-muted/30">
-            <LeafletMap latlng={position} onChange={onPositionChange} />
+            <LocationPicker latlng={position} onChange={onPositionChange} />
           </div>
           <div className="w-full flex flex-col p-3 gap-3">
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-1">
-                <Label htmlFor="memo-location-lat" className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <Label htmlFor="memo-location-lat" className="text-xs uppercase tracking-wide text-muted-foreground">
                   Lat
                 </Label>
                 <Input
@@ -70,7 +57,7 @@ export const LocationDialog = ({
                 />
               </div>
               <div className="grid gap-1">
-                <Label htmlFor="memo-location-lng" className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <Label htmlFor="memo-location-lng" className="text-xs uppercase tracking-wide text-muted-foreground">
                   Lng
                 </Label>
                 <Input
@@ -87,7 +74,7 @@ export const LocationDialog = ({
               </div>
             </div>
             <div className="grid gap-1">
-              <Label htmlFor="memo-location-placeholder" className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <Label htmlFor="memo-location-placeholder" className="text-xs uppercase tracking-wide text-muted-foreground">
                 {t("tooltip.select-location")}
               </Label>
               <Textarea
