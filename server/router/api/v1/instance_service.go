@@ -3,6 +3,7 @@ package v1
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
@@ -15,17 +16,16 @@ import (
 
 // GetInstanceProfile returns the instance profile.
 func (s *APIV1Service) GetInstanceProfile(ctx context.Context, _ *v1pb.GetInstanceProfileRequest) (*v1pb.InstanceProfile, error) {
-	instanceProfile := &v1pb.InstanceProfile{
-		Version:     s.Profile.Version,
-		Mode:        s.Profile.Mode,
-		InstanceUrl: s.Profile.InstanceURL,
-	}
 	owner, err := s.GetInstanceOwner(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to get instance owner: %v", err)
 	}
-	if owner != nil {
-		instanceProfile.Owner = owner.Name
+
+	instanceProfile := &v1pb.InstanceProfile{
+		Version:     s.Profile.Version,
+		Demo:        s.Profile.Demo,
+		InstanceUrl: s.Profile.InstanceURL,
+		Initialized: owner != nil,
 	}
 	return instanceProfile, nil
 }
@@ -64,7 +64,7 @@ func (s *APIV1Service) GetInstanceSetting(ctx context.Context, request *v1pb.Get
 		return nil, status.Errorf(codes.NotFound, "instance setting not found")
 	}
 
-	// For storage setting, only host can get it.
+	// For storage setting, only admin can get it.
 	if instanceSetting.Key == storepb.InstanceSettingKey_STORAGE {
 		user, err := s.fetchCurrentUser(ctx)
 		if err != nil {
@@ -73,7 +73,7 @@ func (s *APIV1Service) GetInstanceSetting(ctx context.Context, request *v1pb.Get
 		if user == nil {
 			return nil, status.Errorf(codes.Unauthenticated, "user not authenticated")
 		}
-		if user.Role != store.RoleHost {
+		if user.Role != store.RoleAdmin {
 			return nil, status.Errorf(codes.PermissionDenied, "permission denied")
 		}
 	}
@@ -89,7 +89,7 @@ func (s *APIV1Service) UpdateInstanceSetting(ctx context.Context, request *v1pb.
 	if user == nil {
 		return nil, status.Errorf(codes.Unauthenticated, "user not authenticated")
 	}
-	if user.Role != store.RoleHost {
+	if user.Role != store.RoleAdmin {
 		return nil, status.Errorf(codes.PermissionDenied, "permission denied")
 	}
 
@@ -270,16 +270,32 @@ func convertInstanceMemoRelatedSettingToStore(setting *v1pb.InstanceSetting_Memo
 	}
 }
 
-var ownerCache *v1pb.User
+var (
+	ownerCache      *v1pb.User
+	ownerCacheMutex sync.RWMutex
+)
 
 func (s *APIV1Service) GetInstanceOwner(ctx context.Context) (*v1pb.User, error) {
+	// Try read lock first for cache hit
+	ownerCacheMutex.RLock()
+	if ownerCache != nil {
+		defer ownerCacheMutex.RUnlock()
+		return ownerCache, nil
+	}
+	ownerCacheMutex.RUnlock()
+
+	// Upgrade to write lock to populate cache
+	ownerCacheMutex.Lock()
+	defer ownerCacheMutex.Unlock()
+
+	// Double-check after acquiring write lock
 	if ownerCache != nil {
 		return ownerCache, nil
 	}
 
-	hostUserType := store.RoleHost
+	adminUserType := store.RoleAdmin
 	user, err := s.Store.GetUser(ctx, &store.FindUser{
-		Role: &hostUserType,
+		Role: &adminUserType,
 	})
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to find owner")
@@ -290,4 +306,12 @@ func (s *APIV1Service) GetInstanceOwner(ctx context.Context) (*v1pb.User, error)
 
 	ownerCache = convertUserFromStore(user)
 	return ownerCache, nil
+}
+
+// ClearInstanceOwnerCache clears the cached instance owner.
+// This should be called when an admin user is created or when the owner changes.
+func (*APIV1Service) ClearInstanceOwnerCache() {
+	ownerCacheMutex.Lock()
+	defer ownerCacheMutex.Unlock()
+	ownerCache = nil
 }
