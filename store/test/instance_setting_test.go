@@ -193,7 +193,7 @@ func TestInstanceSettingStorageSetting(t *testing.T) {
 	storageSetting, err := ts.GetInstanceStorageSetting(ctx)
 	require.NoError(t, err)
 	require.NotNil(t, storageSetting)
-	require.Equal(t, storepb.InstanceStorageSetting_DATABASE, storageSetting.StorageType)
+	require.Equal(t, storepb.InstanceStorageSetting_LOCAL, storageSetting.StorageType)
 	require.Equal(t, int64(30), storageSetting.UploadSizeLimitMb)
 	require.Equal(t, "assets/{timestamp}_{filename}", storageSetting.FilepathTemplate)
 

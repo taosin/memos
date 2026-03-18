@@ -6,8 +6,8 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
-	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
+	"github.com/labstack/echo/v5"
+	"github.com/labstack/echo/v5/middleware"
 	"golang.org/x/sync/semaphore"
 
 	"github.com/usememos/memos/internal/profile"
@@ -31,6 +31,7 @@ type APIV1Service struct {
 	Profile         *profile.Profile
 	Store           *store.Store
 	MarkdownService markdown.Service
+	SSEHub          *SSEHub
 
 	// thumbnailSemaphore limits concurrent thumbnail generation to prevent memory exhaustion
 	thumbnailSemaphore *semaphore.Weighted
@@ -45,6 +46,7 @@ func NewAPIV1Service(secret string, profile *profile.Profile, store *store.Store
 		Profile:            profile,
 		Store:              store,
 		MarkdownService:    markdownService,
+		SSEHub:             NewSSEHub(),
 		thumbnailSemaphore: semaphore.NewWeighted(3), // Limit to 3 concurrent thumbnail generations
 	}
 }
@@ -73,16 +75,9 @@ func (s *APIV1Service) RegisterGateway(ctx context.Context, echoServer *echo.Ech
 				return
 			}
 
-			// Set context based on auth result (may be nil for public endpoints)
+			// Apply auth result to context (no-op when result is nil for public endpoints)
 			if result != nil {
-				if result.Claims != nil {
-					// Access Token V2 - stateless, use claims
-					ctx = auth.SetUserClaimsInContext(ctx, result.Claims)
-					ctx = context.WithValue(ctx, auth.UserIDContextKey, result.Claims.UserID)
-				} else if result.User != nil {
-					// PAT - have full user
-					ctx = auth.SetUserInContext(ctx, result.User, result.AccessToken)
-				}
+				ctx = auth.ApplyToContext(ctx, result)
 				r = r.WithContext(ctx)
 			}
 
@@ -119,7 +114,13 @@ func (s *APIV1Service) RegisterGateway(ctx context.Context, echoServer *echo.Ech
 		return err
 	}
 	gwGroup := echoServer.Group("")
-	gwGroup.Use(middleware.CORS())
+	gwGroup.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowOrigins: []string{"*"},
+	}))
+	// Register SSE endpoint with same CORS as rest of /api/v1.
+	gwGroup.GET("/api/v1/sse", func(c *echo.Context) error {
+		return handleSSE(c, s.SSEHub, auth.NewAuthenticator(s.Store, s.Secret))
+	})
 	handler := echo.WrapHandler(gwMux)
 
 	gwGroup.Any("/api/v1/*", handler)
@@ -139,8 +140,8 @@ func (s *APIV1Service) RegisterGateway(ctx context.Context, echoServer *echo.Ech
 
 	// Wrap with CORS for browser access
 	corsHandler := middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOriginFunc: func(_ string) (bool, error) {
-			return true, nil
+		UnsafeAllowOriginFunc: func(_ *echo.Context, origin string) (string, bool, error) {
+			return origin, true, nil
 		},
 		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodOptions},
 		AllowHeaders:     []string{"*"},

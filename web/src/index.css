@@ -25,6 +25,13 @@
     border: 1px solid var(--border);
   }
 
+  /* KaTeX math rendering */
+  .katex-display {
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-width: 100%;
+  }
+
   /* Leaflet Popup Overrides */
   .leaflet-popup-content-wrapper {
     border-radius: 0.5rem !important;

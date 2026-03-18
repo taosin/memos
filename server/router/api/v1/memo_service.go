@@ -7,13 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lithammer/shortuuid/v4"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/usememos/memos/internal/base"
 	"github.com/usememos/memos/plugin/webhook"
 	v1pb "github.com/usememos/memos/proto/gen/api/v1"
 	storepb "github.com/usememos/memos/proto/gen/store"
@@ -30,13 +28,9 @@ func (s *APIV1Service) CreateMemo(ctx context.Context, request *v1pb.CreateMemoR
 		return nil, status.Errorf(codes.Unauthenticated, "user not authenticated")
 	}
 
-	// Use custom memo_id if provided, otherwise generate a new UUID
-	memoUID := strings.TrimSpace(request.MemoId)
-	if memoUID == "" {
-		memoUID = shortuuid.New()
-	} else if !base.UIDMatcher.MatchString(memoUID) {
-		// Validate custom memo ID format
-		return nil, status.Errorf(codes.InvalidArgument, "invalid memo_id format: must be 1-32 characters, alphanumeric and hyphens only, cannot start or end with hyphen")
+	memoUID, err := ValidateAndGenerateUID(request.MemoId)
+	if err != nil {
+		return nil, err
 	}
 
 	create := &store.Memo{
@@ -132,7 +126,11 @@ func (s *APIV1Service) CreateMemo(ctx context.Context, request *v1pb.CreateMemoR
 		}
 	}
 
-	memoMessage, err := s.convertMemoFromStore(ctx, memo, nil, attachments)
+	relations, err := s.loadMemoRelations(ctx, memo)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to load memo relations")
+	}
+	memoMessage, err := s.convertMemoFromStore(ctx, memo, nil, attachments, relations)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to convert memo")
 	}
@@ -140,6 +138,12 @@ func (s *APIV1Service) CreateMemo(ctx context.Context, request *v1pb.CreateMemoR
 	if err := s.DispatchMemoCreatedWebhook(ctx, memoMessage); err != nil {
 		slog.Warn("Failed to dispatch memo created webhook", slog.Any("err", err))
 	}
+
+	// Broadcast live refresh event.
+	s.SSEHub.Broadcast(&SSEEvent{
+		Type: SSEEventMemoCreated,
+		Name: memoMessage.Name,
+	})
 
 	return memoMessage, nil
 }
@@ -149,9 +153,19 @@ func (s *APIV1Service) ListMemos(ctx context.Context, request *v1pb.ListMemosReq
 		// Exclude comments by default.
 		ExcludeComments: true,
 	}
+	currentUser, err := s.fetchCurrentUser(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to get user")
+	}
+
 	if request.State == v1pb.State_ARCHIVED {
 		state := store.Archived
 		memoFind.RowStatus = &state
+		// Archived memos are only visible to their creator.
+		if currentUser == nil {
+			return &v1pb.ListMemosResponse{}, nil
+		}
+		memoFind.CreatorID = &currentUser.ID
 	} else {
 		state := store.Normal
 		memoFind.RowStatus = &state
@@ -174,10 +188,6 @@ func (s *APIV1Service) ListMemos(ctx context.Context, request *v1pb.ListMemosReq
 		memoFind.Filters = append(memoFind.Filters, request.Filter)
 	}
 
-	currentUser, err := s.fetchCurrentUser(ctx)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to get user")
-	}
 	if currentUser == nil {
 		memoFind.VisibilityList = []store.Visibility{store.Public}
 	} else {
@@ -266,12 +276,19 @@ func (s *APIV1Service) ListMemos(ctx context.Context, request *v1pb.ListMemosReq
 		attachmentMap[*attachment.MemoID] = append(attachmentMap[*attachment.MemoID], attachment)
 	}
 
+	// RELATIONS (batch load to avoid N+1)
+	relationMap, err := s.batchConvertMemoRelations(ctx, memos)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to batch load memo relations")
+	}
+
 	for _, memo := range memos {
 		memoName := fmt.Sprintf("%s%s", MemoNamePrefix, memo.UID)
 		reactions := reactionMap[memoName]
 		attachments := attachmentMap[memo.ID]
+		relations := relationMap[memo.ID]
 
-		memoMessage, err := s.convertMemoFromStore(ctx, memo, reactions, attachments)
+		memoMessage, err := s.convertMemoFromStore(ctx, memo, reactions, attachments, relations)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to convert memo")
 		}
@@ -300,6 +317,18 @@ func (s *APIV1Service) GetMemo(ctx context.Context, request *v1pb.GetMemoRequest
 	if memo == nil {
 		return nil, status.Errorf(codes.NotFound, "memo not found")
 	}
+
+	// Archived memos are only visible to their creator.
+	if memo.RowStatus == store.Archived {
+		user, err := s.fetchCurrentUser(ctx)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to get user")
+		}
+		if user == nil || memo.CreatorID != user.ID {
+			return nil, status.Errorf(codes.NotFound, "memo not found")
+		}
+	}
+
 	if memo.Visibility != store.Public {
 		user, err := s.fetchCurrentUser(ctx)
 		if err != nil {
@@ -327,7 +356,11 @@ func (s *APIV1Service) GetMemo(ctx context.Context, request *v1pb.GetMemoRequest
 		return nil, status.Errorf(codes.Internal, "failed to list attachments")
 	}
 
-	memoMessage, err := s.convertMemoFromStore(ctx, memo, reactions, attachments)
+	relations, err := s.loadMemoRelations(ctx, memo)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to load memo relations")
+	}
+	memoMessage, err := s.convertMemoFromStore(ctx, memo, reactions, attachments, relations)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to convert memo")
 	}
@@ -345,7 +378,7 @@ func (s *APIV1Service) UpdateMemo(ctx context.Context, request *v1pb.UpdateMemoR
 
 	memo, err := s.Store.GetMemo(ctx, &store.FindMemo{UID: &memoUID})
 	if err != nil {
-		return nil, err
+		return nil, status.Errorf(codes.Internal, "failed to get memo: %v", err)
 	}
 	if memo == nil {
 		return nil, status.Errorf(codes.NotFound, "memo not found")
@@ -462,7 +495,11 @@ func (s *APIV1Service) UpdateMemo(ctx context.Context, request *v1pb.UpdateMemoR
 		return nil, status.Errorf(codes.Internal, "failed to list attachments")
 	}
 
-	memoMessage, err := s.convertMemoFromStore(ctx, memo, reactions, attachments)
+	relations, err := s.loadMemoRelations(ctx, memo)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to load memo relations")
+	}
+	memoMessage, err := s.convertMemoFromStore(ctx, memo, reactions, attachments, relations)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to convert memo")
 	}
@@ -470,6 +507,12 @@ func (s *APIV1Service) UpdateMemo(ctx context.Context, request *v1pb.UpdateMemoR
 	if err := s.DispatchMemoUpdatedWebhook(ctx, memoMessage); err != nil {
 		slog.Warn("Failed to dispatch memo updated webhook", slog.Any("err", err))
 	}
+
+	// Broadcast live refresh event.
+	s.SSEHub.Broadcast(&SSEEvent{
+		Type: SSEEventMemoUpdated,
+		Name: memoMessage.Name,
+	})
 
 	return memoMessage, nil
 }
@@ -515,7 +558,8 @@ func (s *APIV1Service) DeleteMemo(ctx context.Context, request *v1pb.DeleteMemoR
 		return nil, status.Errorf(codes.Internal, "failed to list attachments")
 	}
 
-	if memoMessage, err := s.convertMemoFromStore(ctx, memo, reactions, attachments); err == nil {
+	deleteRelations, _ := s.loadMemoRelations(ctx, memo)
+	if memoMessage, err := s.convertMemoFromStore(ctx, memo, reactions, attachments, deleteRelations); err == nil {
 		// Try to dispatch webhook when memo is deleted.
 		if err := s.DispatchMemoDeletedWebhook(ctx, memoMessage); err != nil {
 			slog.Warn("Failed to dispatch memo deleted webhook", slog.Any("err", err))
@@ -539,6 +583,12 @@ func (s *APIV1Service) DeleteMemo(ctx context.Context, request *v1pb.DeleteMemoR
 		return nil, status.Errorf(codes.Internal, "failed to delete memo")
 	}
 
+	// Broadcast live refresh event.
+	s.SSEHub.Broadcast(&SSEEvent{
+		Type: SSEEventMemoDeleted,
+		Name: request.Name,
+	})
+
 	return &emptypb.Empty{}, nil
 }
 
@@ -550,6 +600,21 @@ func (s *APIV1Service) CreateMemoComment(ctx context.Context, request *v1pb.Crea
 	relatedMemo, err := s.Store.GetMemo(ctx, &store.FindMemo{UID: &memoUID})
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to get memo")
+	}
+	if relatedMemo == nil {
+		return nil, status.Errorf(codes.NotFound, "memo not found")
+	}
+
+	// Check memo visibility before allowing comment.
+	user, err := s.fetchCurrentUser(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to get user")
+	}
+	if user == nil {
+		return nil, status.Errorf(codes.Unauthenticated, "user not authenticated")
+	}
+	if relatedMemo.Visibility == store.Private && relatedMemo.CreatorID != user.ID && !isSuperUser(user) {
+		return nil, status.Errorf(codes.PermissionDenied, "permission denied")
 	}
 
 	// Create the memo comment first.
@@ -609,6 +674,16 @@ func (s *APIV1Service) CreateMemoComment(ctx context.Context, request *v1pb.Crea
 			return nil, status.Errorf(codes.Internal, "failed to create inbox")
 		}
 	}
+
+	if err := s.DispatchMemoCommentCreatedWebhook(ctx, memoComment, relatedMemo.CreatorID); err != nil {
+		slog.Warn("Failed to dispatch memo comment created webhook", slog.Any("err", err))
+	}
+
+	// Broadcast live refresh event for the parent memo so subscribers see the new comment.
+	s.SSEHub.Broadcast(&SSEEvent{
+		Type: SSEEventMemoCommentCreated,
+		Name: request.Name,
+	})
 
 	return memoComment, nil
 }
@@ -688,13 +763,20 @@ func (s *APIV1Service) ListMemoComments(ctx context.Context, request *v1pb.ListM
 		attachmentMap[*attachment.MemoID] = append(attachmentMap[*attachment.MemoID], attachment)
 	}
 
+	// RELATIONS (batch load to avoid N+1)
+	relationMap, err := s.batchConvertMemoRelations(ctx, memos)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to batch load memo relations")
+	}
+
 	var memosResponse []*v1pb.Memo
 	for _, m := range memos {
 		memoName := memoIDToNameMap[m.ID]
 		reactions := memoReactionsMap[memoName]
 		attachments := attachmentMap[m.ID]
+		relations := relationMap[m.ID]
 
-		memoMessage, err := s.convertMemoFromStore(ctx, m, reactions, attachments)
+		memoMessage, err := s.convertMemoFromStore(ctx, m, reactions, attachments, relations)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to convert memo")
 		}
@@ -728,6 +810,24 @@ func (s *APIV1Service) DispatchMemoUpdatedWebhook(ctx context.Context, memo *v1p
 // DispatchMemoDeletedWebhook dispatches webhook when memo is deleted.
 func (s *APIV1Service) DispatchMemoDeletedWebhook(ctx context.Context, memo *v1pb.Memo) error {
 	return s.dispatchMemoRelatedWebhook(ctx, memo, "memos.memo.deleted")
+}
+
+// DispatchMemoCommentCreatedWebhook dispatches webhook to the related memo owner when a comment is created.
+func (s *APIV1Service) DispatchMemoCommentCreatedWebhook(ctx context.Context, commentMemo *v1pb.Memo, relatedMemoCreatorID int32) error {
+	webhooks, err := s.Store.GetUserWebhooks(ctx, relatedMemoCreatorID)
+	if err != nil {
+		return err
+	}
+	for _, hook := range webhooks {
+		payload, err := convertMemoToWebhookPayload(commentMemo)
+		if err != nil {
+			return errors.Wrap(err, "failed to convert memo to webhook payload")
+		}
+		payload.ActivityType = "memos.memo.comment.created"
+		payload.URL = hook.Url
+		webhook.PostAsync(payload)
+	}
+	return nil
 }
 
 func (s *APIV1Service) dispatchMemoRelatedWebhook(ctx context.Context, memo *v1pb.Memo, activityType string) error {

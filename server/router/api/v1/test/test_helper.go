@@ -27,13 +27,15 @@ func NewTestService(t *testing.T) *TestService {
 	// Create a test store with SQLite
 	testStore := teststore.NewTestingStore(ctx, t)
 
-	// Create a test profile
+	// Create a test profile with a temp directory for file storage,
+	// so tests that create attachments don't leave artifacts in the source tree.
 	testProfile := &profile.Profile{
 		Demo:        true,
 		Version:     "test-1.0.0",
 		InstanceURL: "http://localhost:8080",
 		Driver:      "sqlite",
 		DSN:         ":memory:",
+		Data:        t.TempDir(),
 	}
 
 	// Create APIV1Service with nil grpcServer since we're testing direct calls
@@ -46,10 +48,8 @@ func NewTestService(t *testing.T) *TestService {
 		Profile:         testProfile,
 		Store:           testStore,
 		MarkdownService: markdownService,
+		SSEHub:          apiv1.NewSSEHub(),
 	}
-
-	// Clear any cached state from previous tests
-	service.ClearInstanceOwnerCache()
 
 	return &TestService{
 		Service: service,
@@ -59,9 +59,8 @@ func NewTestService(t *testing.T) *TestService {
 	}
 }
 
-// Cleanup clears caches and closes resources after test.
+// Cleanup closes resources after test.
 func (ts *TestService) Cleanup() {
-	ts.Service.ClearInstanceOwnerCache()
 	ts.Store.Close()
 }
 

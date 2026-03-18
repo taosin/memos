@@ -1,5 +1,9 @@
 import { defaultSchema } from "rehype-sanitize";
 
+// Class names added by remark-gfm for task lists
+export const TASK_LIST_CLASS = "contains-task-list";
+export const TASK_LIST_ITEM_CLASS = "task-list-item";
+
 // Compact mode display settings
 export const COMPACT_MODE_CONFIG = {
   maxHeightVh: 60, // 60% of viewport height
@@ -28,6 +32,7 @@ export const SANITIZE_SCHEMA = {
   attributes: {
     ...defaultSchema.attributes,
     div: [...(defaultSchema.attributes?.div || []), "className"],
+    img: [...(defaultSchema.attributes?.img || []), "height", "width"],
     span: [...(defaultSchema.attributes?.span || []), "className", "style", ["aria*"], ["data*"]],
     // iframe attributes for video embeds
     iframe: ["src", "width", "height", "frameborder", "allowfullscreen", "allow", "title", "referrerpolicy", "loading"],

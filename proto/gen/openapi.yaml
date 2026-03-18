@@ -158,7 +158,7 @@ paths:
         get:
             tags:
                 - AttachmentService
-            description: GetAttachment returns a attachment by name.
+            description: GetAttachment returns an attachment by name.
             operationId: AttachmentService_GetAttachment
             parameters:
                 - name: attachment
@@ -183,7 +183,7 @@ paths:
         delete:
             tags:
                 - AttachmentService
-            description: DeleteAttachment deletes a attachment by name.
+            description: DeleteAttachment deletes an attachment by name.
             operationId: AttachmentService_DeleteAttachment
             parameters:
                 - name: attachment
@@ -205,7 +205,7 @@ paths:
         patch:
             tags:
                 - AttachmentService
-            description: UpdateAttachment updates a attachment.
+            description: UpdateAttachment updates an attachment.
             operationId: AttachmentService_UpdateAttachment
             parameters:
                 - name: attachment
@@ -2141,12 +2141,12 @@ components:
                 instanceUrl:
                     type: string
                     description: Instance URL is the URL of the instance.
-                initialized:
-                    type: boolean
+                admin:
+                    allOf:
+                        - $ref: '#/components/schemas/User'
                     description: |-
-                        Indicates if the instance has completed first-time setup.
-                         When false, the instance requires initialization (creating the first admin account).
-                         This follows the pattern used by other self-hosted platforms for setup workflows.
+                        The first administrator who set up this instance.
+                         When null, instance requires initial setup (creating the first admin account).
             description: Instance profile message containing basic instance information.
         InstanceSetting:
             type: object
@@ -2590,6 +2590,9 @@ components:
                     type: boolean
                 hasIncompleteTasks:
                     type: boolean
+                title:
+                    type: string
+                    description: The title extracted from the first H1 heading, if present.
             description: Computed properties of a memo.
         OAuth2Config:
             type: object
@@ -2757,15 +2760,16 @@ components:
             description: Nested message for password-based authentication credentials.
         SignInRequest_SSOCredentials:
             required:
-                - idpId
+                - idpName
                 - code
                 - redirectUri
             type: object
             properties:
-                idpId:
-                    type: integer
-                    description: The ID of the SSO provider.
-                    format: int32
+                idpName:
+                    type: string
+                    description: |-
+                        The resource name of the SSO provider.
+                         Format: identity-providers/{uid}
                 code:
                     type: string
                     description: The authorization code from the SSO provider.

@@ -31,6 +31,12 @@ func TestTagParser(t *testing.T) {
 			shouldParse: true,
 		},
 		{
+			name:        "tag with ampersand",
+			input:       "#science&tech",
+			expectedTag: "science&tech",
+			shouldParse: true,
+		},
+		{
 			name:        "tag with underscore",
 			input:       "#2024_plans",
 			expectedTag: "2024_plans",
@@ -166,6 +172,18 @@ func TestTagParser(t *testing.T) {
 			name:        "emoji",
 			input:       "#test🚀",
 			expectedTag: "test🚀",
+			shouldParse: true,
+		},
+		{
+			name:        "emoji with VS16",
+			input:       "#test👁️", // Eye + VS16
+			expectedTag: "test👁️",
+			shouldParse: true,
+		},
+		{
+			name:        "emoji with ZWJ sequence",
+			input:       "#family👨‍👩‍👧‍👦", // Family ZWJ sequence
+			expectedTag: "family👨‍👩‍👧‍👦",
 			shouldParse: true,
 		},
 	}

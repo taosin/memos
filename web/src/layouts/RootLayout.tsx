@@ -1,13 +1,14 @@
-import { Suspense, useEffect, useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { Outlet, useLocation, useSearchParams } from "react-router-dom";
 import usePrevious from "react-use/lib/usePrevious";
 import Navigation from "@/components/Navigation";
-import Spinner from "@/components/Spinner";
 import { useInstance } from "@/contexts/InstanceContext";
 import { useMemoFilterContext } from "@/contexts/MemoFilterContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import useMediaQuery from "@/hooks/useMediaQuery";
+import useNavigateTo from "@/hooks/useNavigateTo";
 import { cn } from "@/lib/utils";
+import { ROUTES } from "@/router/routes";
 import { redirectOnAuthFailure } from "@/utils/auth-redirect";
 
 const RootLayout = () => {
@@ -15,16 +16,24 @@ const RootLayout = () => {
   const [searchParams] = useSearchParams();
   const sm = useMediaQuery("sm");
   const currentUser = useCurrentUser();
+  const navigateTo = useNavigateTo();
   const { memoRelatedSetting } = useInstance();
   const { removeFilter } = useMemoFilterContext();
   const pathname = useMemo(() => location.pathname, [location.pathname]);
   const prevPathname = usePrevious(pathname);
 
   useEffect(() => {
-    if (!currentUser && memoRelatedSetting.disallowPublicVisibility) {
-      redirectOnAuthFailure();
+    if (!currentUser) {
+      if (memoRelatedSetting.disallowPublicVisibility) {
+        // When public visibility is disallowed, always redirect unauth users to auth.
+        redirectOnAuthFailure(true);
+      } else if (pathname === ROUTES.ROOT) {
+        navigateTo(ROUTES.EXPLORE);
+      } else {
+        redirectOnAuthFailure();
+      }
     }
-  }, [currentUser, memoRelatedSetting.disallowPublicVisibility]);
+  }, [currentUser, pathname, memoRelatedSetting.disallowPublicVisibility, navigateTo]);
 
   useEffect(() => {
     // When the route changes and there is no filter in the search params, remove all filters
@@ -47,15 +56,7 @@ const RootLayout = () => {
         </div>
       )}
       <main className="w-full h-auto grow shrink flex flex-col justify-start items-center">
-        <Suspense
-          fallback={
-            <div className="w-full h-64 flex items-center justify-center">
-              <Spinner size="lg" />
-            </div>
-          }
-        >
-          <Outlet />
-        </Suspense>
+        <Outlet />
       </main>
     </div>
   );

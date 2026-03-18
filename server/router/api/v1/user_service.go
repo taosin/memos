@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
@@ -13,7 +12,6 @@ import (
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/ast"
-	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/grpc/codes"
@@ -23,6 +21,7 @@ import (
 
 	"github.com/usememos/memos/internal/base"
 	"github.com/usememos/memos/internal/util"
+	"github.com/usememos/memos/plugin/webhook"
 	v1pb "github.com/usememos/memos/proto/gen/api/v1"
 	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/server/auth"
@@ -163,7 +162,7 @@ func (s *APIV1Service) CreateUser(ctx context.Context, request *v1pb.CreateUserR
 
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(request.User.Password), bcrypt.DefaultCost)
 	if err != nil {
-		return nil, echo.NewHTTPError(http.StatusInternalServerError, "failed to generate password hash").SetInternal(err)
+		return nil, status.Errorf(codes.Internal, "failed to generate password hash: %v", err)
 	}
 
 	user, err := s.Store.CreateUser(ctx, &store.User{
@@ -175,12 +174,6 @@ func (s *APIV1Service) CreateUser(ctx context.Context, request *v1pb.CreateUserR
 	})
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to create user: %v", err)
-	}
-
-	// If this is the first admin user being created, clear the owner cache
-	// so that GetInstanceProfile will return initialized=true
-	if roleToAssign == store.RoleAdmin {
-		s.ClearInstanceOwnerCache()
 	}
 
 	return convertUserFromStore(user), nil
@@ -278,7 +271,7 @@ func (s *APIV1Service) UpdateUser(ctx context.Context, request *v1pb.UpdateUserR
 		case "password":
 			passwordHash, err := bcrypt.GenerateFromPassword([]byte(request.User.Password), bcrypt.DefaultCost)
 			if err != nil {
-				return nil, echo.NewHTTPError(http.StatusInternalServerError, "failed to generate password hash").SetInternal(err)
+				return nil, status.Errorf(codes.Internal, "failed to generate password hash: %v", err)
 			}
 			passwordHashStr := string(passwordHash)
 			update.PasswordHash = &passwordHashStr
@@ -306,6 +299,9 @@ func (s *APIV1Service) DeleteUser(ctx context.Context, request *v1pb.DeleteUserR
 	currentUser, err := s.fetchCurrentUser(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to get user: %v", err)
+	}
+	if currentUser == nil {
+		return nil, status.Errorf(codes.Unauthenticated, "user not authenticated")
 	}
 	if currentUser.ID != userID && currentUser.Role != store.RoleAdmin {
 		return nil, status.Errorf(codes.PermissionDenied, "permission denied")
@@ -734,6 +730,9 @@ func (s *APIV1Service) CreateUserWebhook(ctx context.Context, request *v1pb.Crea
 	if request.Webhook.Url == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "webhook URL is required")
 	}
+	if err := webhook.ValidateURL(strings.TrimSpace(request.Webhook.Url)); err != nil {
+		return nil, err
+	}
 
 	webhookID := generateUserWebhookID()
 	webhook := &storepb.WebhooksUserSetting_Webhook{
@@ -802,7 +801,11 @@ func (s *APIV1Service) UpdateUserWebhook(ctx context.Context, request *v1pb.Upda
 			switch path {
 			case "url":
 				if request.Webhook.Url != "" {
-					updatedWebhook.Url = strings.TrimSpace(request.Webhook.Url)
+					trimmed := strings.TrimSpace(request.Webhook.Url)
+					if err := webhook.ValidateURL(trimmed); err != nil {
+						return nil, err
+					}
+					updatedWebhook.Url = trimmed
 				}
 			case "display_name":
 				updatedWebhook.Title = request.Webhook.DisplayName
@@ -813,7 +816,11 @@ func (s *APIV1Service) UpdateUserWebhook(ctx context.Context, request *v1pb.Upda
 	} else {
 		// If no update mask is provided, update all fields
 		if request.Webhook.Url != "" {
-			updatedWebhook.Url = strings.TrimSpace(request.Webhook.Url)
+			trimmed := strings.TrimSpace(request.Webhook.Url)
+			if err := webhook.ValidateURL(trimmed); err != nil {
+				return nil, err
+			}
+			updatedWebhook.Url = trimmed
 		}
 		updatedWebhook.Title = request.Webhook.DisplayName
 	}

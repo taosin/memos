@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { TASK_LIST_CLASS, TASK_LIST_ITEM_CLASS } from "../constants";
 import type { ReactMarkdownProps } from "./types";
 
 interface ListProps extends React.HTMLAttributes<HTMLUListElement | HTMLOListElement>, ReactMarkdownProps {
@@ -12,13 +13,17 @@ interface ListProps extends React.HTMLAttributes<HTMLUListElement | HTMLOListEle
  */
 export const List = ({ ordered, children, className, node: _node, ...domProps }: ListProps) => {
   const Component = ordered ? "ol" : "ul";
-  const isTaskList = className?.includes("contains-task-list");
+  const isTaskList = className?.includes(TASK_LIST_CLASS);
 
   return (
     <Component
       className={cn(
         "my-0 mb-2 list-outside",
-        isTaskList ? "pl-0 list-none" : cn("pl-6", ordered ? "list-decimal" : "list-disc"),
+        isTaskList
+          ? // Task list: no bullets, nested lists get left margin for indentation
+            "list-none [&_ul.contains-task-list]:ml-6"
+          : // Regular list: standard padding and list style
+            cn("pl-6", ordered ? "list-decimal" : "list-disc"),
         className,
       )}
       {...domProps}
@@ -38,17 +43,17 @@ interface ListItemProps extends React.LiHTMLAttributes<HTMLLIElement>, ReactMark
  * Applies specialized styling for task checkboxes
  */
 export const ListItem = ({ children, className, node: _node, ...domProps }: ListItemProps) => {
-  const isTaskListItem = className?.includes("task-list-item");
+  const isTaskListItem = className?.includes(TASK_LIST_ITEM_CLASS);
 
   if (isTaskListItem) {
     return (
       <li
         className={cn(
           "mt-0.5 leading-6 list-none",
-          // Task item styles: checkbox margins, inline paragraph, nested list indent
+          // Checkbox styling: margin and alignment
           "[&>button]:mr-2 [&>button]:align-middle",
+          // Inline paragraph for task text
           "[&>p]:inline [&>p]:m-0",
-          "[&>.contains-task-list]:pl-6",
           className,
         )}
         {...domProps}

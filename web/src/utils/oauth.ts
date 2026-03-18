@@ -3,7 +3,7 @@ const STATE_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 
 interface OAuthState {
   state: string;
-  identityProviderId: number;
+  identityProviderName: string;
   timestamp: number;
   returnUrl?: string;
   codeVerifier?: string; // PKCE code_verifier
@@ -40,18 +40,43 @@ function base64UrlEncode(buffer: Uint8Array): string {
 }
 
 // Store OAuth state and PKCE parameters in sessionStorage
-// Returns both state and codeChallenge for use in authorization URL
-export async function storeOAuthState(identityProviderId: number, returnUrl?: string): Promise<{ state: string; codeChallenge: string }> {
+// Returns state and optional codeChallenge for use in authorization URL
+// PKCE is optional - if crypto APIs are unavailable (HTTP context), falls back to standard OAuth
+export async function storeOAuthState(
+  identityProviderName: string,
+  returnUrl?: string,
+): Promise<{ state: string; codeChallenge?: string }> {
   const state = generateSecureState();
-  const codeVerifier = generateCodeVerifier();
-  const codeChallenge = await generateCodeChallenge(codeVerifier);
+
+  // Try to generate PKCE parameters if crypto.subtle is available (HTTPS/localhost)
+  // Falls back to standard OAuth flow if unavailable (HTTP context)
+  let codeVerifier: string | undefined;
+  let codeChallenge: string | undefined;
+
+  try {
+    // Check if crypto.subtle is available (requires secure context: HTTPS or localhost)
+    if (typeof crypto !== "undefined" && crypto.subtle) {
+      codeVerifier = generateCodeVerifier();
+      codeChallenge = await generateCodeChallenge(codeVerifier);
+    } else {
+      console.warn(
+        "PKCE not available: crypto.subtle requires HTTPS. Falling back to standard OAuth flow without PKCE. " +
+          "For enhanced security, please access Memos over HTTPS.",
+      );
+    }
+  } catch (error) {
+    // If PKCE generation fails for any reason, fall back to standard OAuth
+    console.warn("Failed to generate PKCE parameters, falling back to standard OAuth:", error);
+    codeVerifier = undefined;
+    codeChallenge = undefined;
+  }
 
   const stateData: OAuthState = {
     state,
-    identityProviderId,
+    identityProviderName,
     timestamp: Date.now(),
     returnUrl,
-    codeVerifier, // Store for later retrieval in callback
+    codeVerifier, // Store for later retrieval in callback (undefined if PKCE not available)
   };
 
   try {
@@ -65,8 +90,8 @@ export async function storeOAuthState(identityProviderId: number, returnUrl?: st
 }
 
 // Validate and retrieve OAuth state from storage (CSRF protection)
-// Returns identityProviderId, returnUrl, and codeVerifier for PKCE
-export function validateOAuthState(stateParam: string): { identityProviderId: number; returnUrl?: string; codeVerifier?: string } | null {
+// Returns identityProviderName, returnUrl, and codeVerifier for PKCE
+export function validateOAuthState(stateParam: string): { identityProviderName: string; returnUrl?: string; codeVerifier?: string } | null {
   try {
     const storedData = sessionStorage.getItem(STATE_STORAGE_KEY);
     if (!storedData) {
@@ -93,7 +118,7 @@ export function validateOAuthState(stateParam: string): { identityProviderId: nu
     // State is valid, clean up and return data
     sessionStorage.removeItem(STATE_STORAGE_KEY);
     return {
-      identityProviderId: stateData.identityProviderId,
+      identityProviderName: stateData.identityProviderName,
       returnUrl: stateData.returnUrl,
       codeVerifier: stateData.codeVerifier, // Return PKCE code_verifier
     };

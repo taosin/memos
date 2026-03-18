@@ -15,33 +15,56 @@ import (
 )
 
 func (s *APIV1Service) ListActivities(ctx context.Context, request *v1pb.ListActivitiesRequest) (*v1pb.ListActivitiesResponse, error) {
-	// Set default page size if not specified
-	pageSize := request.PageSize
-	if pageSize <= 0 || pageSize > 1000 {
-		pageSize = 100
+	var limit, offset int
+	if request.PageToken != "" {
+		var pageToken v1pb.PageToken
+		if err := unmarshalPageToken(request.PageToken, &pageToken); err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid page token: %v", err)
+		}
+		limit = int(pageToken.Limit)
+		offset = int(pageToken.Offset)
+	} else {
+		limit = int(request.PageSize)
 	}
-
-	// TODO: Implement pagination with page_token and use pageSize for limiting
-	// For now, we'll fetch all activities and the pageSize will be used in future pagination implementation
-	_ = pageSize // Acknowledge pageSize variable to avoid linter warning
-
-	activities, err := s.Store.ListActivities(ctx, &store.FindActivity{})
+	if limit <= 0 {
+		limit = DefaultPageSize
+	}
+	if limit > MaxPageSize {
+		limit = MaxPageSize
+	}
+	limitPlusOne := limit + 1
+	activities, err := s.Store.ListActivities(ctx, &store.FindActivity{
+		Limit:  &limitPlusOne,
+		Offset: &offset,
+	})
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to list activities: %v", err)
 	}
 
 	var activityMessages []*v1pb.Activity
+	nextPageToken := ""
+	if len(activities) == limitPlusOne {
+		activities = activities[:limit]
+		nextPageToken, err = getPageToken(limit, offset+limit)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to get next page token, error: %v", err)
+		}
+	}
+
 	for _, activity := range activities {
 		activityMessage, err := s.convertActivityFromStore(ctx, activity)
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, "failed to convert activity from store: %v", err)
+			// Skip activities that reference deleted memos instead of failing the entire list
+			continue
 		}
-		activityMessages = append(activityMessages, activityMessage)
+		if activityMessage != nil {
+			activityMessages = append(activityMessages, activityMessage)
+		}
 	}
 
 	return &v1pb.ListActivitiesResponse{
-		Activities: activityMessages,
-		// TODO: Implement next_page_token for pagination
+		Activities:    activityMessages,
+		NextPageToken: nextPageToken,
 	}, nil
 }
 
@@ -61,16 +84,24 @@ func (s *APIV1Service) GetActivity(ctx context.Context, request *v1pb.GetActivit
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to convert activity from store: %v", err)
 	}
+	if activityMessage == nil {
+		return nil, status.Errorf(codes.NotFound, "activity references deleted content")
+	}
 	return activityMessage, nil
 }
 
 // convertActivityFromStore converts a storage-layer activity to an API activity.
 // This handles the mapping between internal activity representation and the public API,
 // including proper type and level conversions.
+// Returns nil if the activity references deleted content (to allow graceful skipping).
 func (s *APIV1Service) convertActivityFromStore(ctx context.Context, activity *store.Activity) (*v1pb.Activity, error) {
 	payload, err := s.convertActivityPayloadFromStore(ctx, activity.Payload)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to convert activity payload from store: %v", err)
+		return nil, err
+	}
+	// Skip activities that reference deleted memos
+	if payload == nil {
+		return nil, nil
 	}
 
 	// Convert store activity type to proto enum
@@ -103,6 +134,7 @@ func (s *APIV1Service) convertActivityFromStore(ctx context.Context, activity *s
 
 // convertActivityPayloadFromStore converts a storage-layer activity payload to an API payload.
 // This resolves references (e.g., memo IDs) to resource names for the API.
+// Returns nil if the activity references deleted content (to allow graceful skipping).
 func (s *APIV1Service) convertActivityPayloadFromStore(ctx context.Context, payload *storepb.ActivityPayload) (*v1pb.ActivityPayload, error) {
 	v2Payload := &v1pb.ActivityPayload{}
 	if payload.MemoComment != nil {
@@ -114,8 +146,9 @@ func (s *APIV1Service) convertActivityPayloadFromStore(ctx context.Context, payl
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to get memo: %v", err)
 		}
+		// If the comment memo was deleted, skip this activity gracefully
 		if memo == nil {
-			return nil, status.Errorf(codes.NotFound, "memo does not exist")
+			return nil, nil
 		}
 
 		// Fetch the related memo (the one being commented on)
@@ -125,6 +158,10 @@ func (s *APIV1Service) convertActivityPayloadFromStore(ctx context.Context, payl
 		})
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to get related memo: %v", err)
+		}
+		// If the related memo was deleted, skip this activity gracefully
+		if relatedMemo == nil {
+			return nil, nil
 		}
 
 		v2Payload.Payload = &v1pb.ActivityPayload_MemoComment{

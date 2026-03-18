@@ -134,8 +134,28 @@ func (s *service) ExtractTags(content []byte) ([]string, error) {
 		return nil, err
 	}
 
-	// Deduplicate and normalize tags
-	return uniqueLowercase(tags), nil
+	// Deduplicate tags while preserving original case
+	return uniquePreserveCase(tags), nil
+}
+
+// extractHeadingText extracts plain text content from a heading node.
+func extractHeadingText(n gast.Node, source []byte) string {
+	var buf strings.Builder
+	for child := n.FirstChild(); child != nil; child = child.NextSibling() {
+		extractTextFromNode(child, source, &buf)
+	}
+	return buf.String()
+}
+
+// extractTextFromNode recursively extracts plain text from a node and its children.
+func extractTextFromNode(n gast.Node, source []byte, buf *strings.Builder) {
+	if textNode, ok := n.(*gast.Text); ok {
+		buf.Write(textNode.Segment.Value(source))
+		return
+	}
+	for child := n.FirstChild(); child != nil; child = child.NextSibling() {
+		extractTextFromNode(child, source, buf)
+	}
 }
 
 // ExtractProperties computes boolean properties about the content.
@@ -146,10 +166,19 @@ func (s *service) ExtractProperties(content []byte) (*storepb.MemoPayload_Proper
 	}
 
 	prop := &storepb.MemoPayload_Property{}
+	firstBlockChecked := false
 
 	err = gast.Walk(root, func(n gast.Node, entering bool) (gast.WalkStatus, error) {
 		if !entering {
 			return gast.WalkContinue, nil
+		}
+
+		// Check if the first block-level child of the document is an H1 heading.
+		if !firstBlockChecked && n.Parent() != nil && n.Parent().Kind() == gast.KindDocument {
+			firstBlockChecked = true
+			if heading, ok := n.(*gast.Heading); ok && heading.Level == 1 {
+				prop.Title = extractHeadingText(n, content)
+			}
 		}
 
 		switch n.Kind() {
@@ -212,9 +241,9 @@ func (s *service) GenerateSnippet(content []byte, maxLength int) (string, error)
 
 	err = gast.Walk(root, func(n gast.Node, entering bool) (gast.WalkStatus, error) {
 		if entering {
-			// Skip code blocks and code spans entirely
+			// Skip code blocks entirely (but keep inline code spans for snippet text)
 			switch n.Kind() {
-			case gast.KindCodeBlock, gast.KindFencedCodeBlock, gast.KindCodeSpan:
+			case gast.KindCodeBlock, gast.KindFencedCodeBlock:
 				return gast.WalkSkipChildren, nil
 			default:
 				// Continue walking for other node types
@@ -222,7 +251,7 @@ func (s *service) GenerateSnippet(content []byte, maxLength int) (string, error)
 
 			// Add space before block elements (except first)
 			switch n.Kind() {
-			case gast.KindParagraph, gast.KindHeading, gast.KindListItem:
+			case gast.KindParagraph, gast.KindHeading, gast.KindListItem, east.KindTableCell, east.KindTableRow, east.KindTableHeader:
 				if buf.Len() > 0 && lastNodeWasBlock {
 					buf.WriteByte(' ')
 				}
@@ -234,7 +263,7 @@ func (s *service) GenerateSnippet(content []byte, maxLength int) (string, error)
 		if !entering {
 			// Mark that we just exited a block element
 			switch n.Kind() {
-			case gast.KindParagraph, gast.KindHeading, gast.KindListItem:
+			case gast.KindParagraph, gast.KindHeading, gast.KindListItem, east.KindTableCell, east.KindTableRow, east.KindTableHeader:
 				lastNodeWasBlock = true
 			default:
 				// Not a block element
@@ -244,15 +273,22 @@ func (s *service) GenerateSnippet(content []byte, maxLength int) (string, error)
 
 		lastNodeWasBlock = false
 
-		// Only extract plain text nodes
-		if textNode, ok := n.(*gast.Text); ok {
-			segment := textNode.Segment
+		// Extract text from various node types
+		switch node := n.(type) {
+		case *gast.Text:
+			segment := node.Segment
 			buf.Write(segment.Value(content))
-
-			// Add space if this is a soft line break
-			if textNode.SoftLineBreak() {
+			if node.SoftLineBreak() {
 				buf.WriteByte(' ')
 			}
+		case *gast.AutoLink:
+			buf.Write(node.URL(content))
+			return gast.WalkSkipChildren, nil
+		case *mast.TagNode:
+			buf.WriteByte('#')
+			buf.Write(node.Tag)
+		default:
+			// Ignore other node types.
 		}
 
 		// Stop walking if we've exceeded double the max length
@@ -297,6 +333,8 @@ func (s *service) ExtractAll(content []byte) (*ExtractedData, error) {
 		Property: &storepb.MemoPayload_Property{},
 	}
 
+	firstBlockChecked := false
+
 	// Single walk to collect all data
 	err = gast.Walk(root, func(n gast.Node, entering bool) (gast.WalkStatus, error) {
 		if !entering {
@@ -306,6 +344,14 @@ func (s *service) ExtractAll(content []byte) (*ExtractedData, error) {
 		// Extract tags
 		if tagNode, ok := n.(*mast.TagNode); ok {
 			data.Tags = append(data.Tags, string(tagNode.Tag))
+		}
+
+		// Check if the first block-level child of the document is an H1 heading.
+		if !firstBlockChecked && n.Parent() != nil && n.Parent().Kind() == gast.KindDocument {
+			firstBlockChecked = true
+			if heading, ok := n.(*gast.Heading); ok && heading.Level == 1 {
+				data.Property.Title = extractHeadingText(n, content)
+			}
 		}
 
 		// Extract properties based on node kind
@@ -334,8 +380,8 @@ func (s *service) ExtractAll(content []byte) (*ExtractedData, error) {
 		return nil, err
 	}
 
-	// Deduplicate and normalize tags
-	data.Tags = uniqueLowercase(data.Tags)
+	// Deduplicate tags while preserving original case
+	data.Tags = uniquePreserveCase(data.Tags)
 
 	return data, nil
 }
@@ -372,16 +418,15 @@ func (s *service) RenameTag(content []byte, oldTag, newTag string) (string, erro
 	return mdRenderer.Render(root, content), nil
 }
 
-// uniqueLowercase returns unique lowercase strings from input.
-func uniqueLowercase(strs []string) []string {
-	seen := make(map[string]bool)
+// uniquePreserveCase returns unique strings from input while preserving case.
+func uniquePreserveCase(strs []string) []string {
+	seen := make(map[string]struct{})
 	var result []string
 
 	for _, s := range strs {
-		lower := strings.ToLower(s)
-		if !seen[lower] {
-			seen[lower] = true
-			result = append(result, lower)
+		if _, exists := seen[s]; !exists {
+			seen[s] = struct{}{}
+			result = append(result, s)
 		}
 	}
 

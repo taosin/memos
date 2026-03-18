@@ -181,6 +181,11 @@ const Editor = forwardRef(function Editor(props: EditorProps, ref: React.Forward
     isInIME,
   });
 
+  // Recalculate editor height when focus mode changes
+  useEffect(() => {
+    updateEditorHeight();
+  }, [isFocusMode, updateEditorHeight]);
+
   return (
     <div
       className={cn(
@@ -192,7 +197,7 @@ const Editor = forwardRef(function Editor(props: EditorProps, ref: React.Forward
     >
       <textarea
         className={cn(
-          "w-full my-1 text-base resize-none overflow-x-hidden overflow-y-auto bg-transparent outline-none placeholder:opacity-70 whitespace-pre-wrap break-words",
+          "w-full text-base resize-none overflow-x-hidden overflow-y-auto bg-transparent outline-none placeholder:opacity-70 whitespace-pre-wrap wrap-break-word",
           // Focus mode: flex-1 h-0 to grow within flex container; Normal: h-full to fill wrapper
           isFocusMode ? "flex-1 h-0" : "h-full",
         )}

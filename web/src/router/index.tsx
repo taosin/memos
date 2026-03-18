@@ -1,26 +1,41 @@
-import type { ComponentType } from "react";
-import { lazy, Suspense } from "react";
+import { lazy } from "react";
 import { createBrowserRouter } from "react-router-dom";
 import App from "@/App";
-import Spinner from "@/components/Spinner";
+import { ChunkLoadErrorFallback } from "@/components/ErrorBoundary";
 import MainLayout from "@/layouts/MainLayout";
 import RootLayout from "@/layouts/RootLayout";
 import Home from "@/pages/Home";
 
-const AdminSignIn = lazy(() => import("@/pages/AdminSignIn"));
-const Archived = lazy(() => import("@/pages/Archived"));
-const AuthCallback = lazy(() => import("@/pages/AuthCallback"));
-const Explore = lazy(() => import("@/pages/Explore"));
-const Inboxes = lazy(() => import("@/pages/Inboxes"));
-const MemoDetail = lazy(() => import("@/pages/MemoDetail"));
-const NotFound = lazy(() => import("@/pages/NotFound"));
-const PermissionDenied = lazy(() => import("@/pages/PermissionDenied"));
-const Attachments = lazy(() => import("@/pages/Attachments"));
-const Setting = lazy(() => import("@/pages/Setting"));
-const SignIn = lazy(() => import("@/pages/SignIn"));
-const SignUp = lazy(() => import("@/pages/SignUp"));
-const UserProfile = lazy(() => import("@/pages/UserProfile"));
-const MemoDetailRedirect = lazy(() => import("./MemoDetailRedirect"));
+// Wrap lazy imports to auto-reload on chunk load failure (e.g., after redeployment).
+function lazyWithReload<T extends React.ComponentType>(factory: () => Promise<{ default: T }>) {
+  return lazy(() =>
+    factory().catch((error) => {
+      const isChunkError =
+        error?.message?.includes("Failed to fetch dynamically imported module") ||
+        error?.message?.includes("Importing a module script failed");
+      const reloadKey = "chunk-reload";
+      if (isChunkError && !sessionStorage.getItem(reloadKey)) {
+        sessionStorage.setItem(reloadKey, "1");
+        window.location.reload();
+      }
+      throw error;
+    }),
+  );
+}
+
+const AdminSignIn = lazyWithReload(() => import("@/pages/AdminSignIn"));
+const Archived = lazyWithReload(() => import("@/pages/Archived"));
+const AuthCallback = lazyWithReload(() => import("@/pages/AuthCallback"));
+const Explore = lazyWithReload(() => import("@/pages/Explore"));
+const Inboxes = lazyWithReload(() => import("@/pages/Inboxes"));
+const MemoDetail = lazyWithReload(() => import("@/pages/MemoDetail"));
+const NotFound = lazyWithReload(() => import("@/pages/NotFound"));
+const PermissionDenied = lazyWithReload(() => import("@/pages/PermissionDenied"));
+const Attachments = lazyWithReload(() => import("@/pages/Attachments"));
+const Setting = lazyWithReload(() => import("@/pages/Setting"));
+const SignIn = lazyWithReload(() => import("@/pages/SignIn"));
+const SignUp = lazyWithReload(() => import("@/pages/SignUp"));
+const UserProfile = lazyWithReload(() => import("@/pages/UserProfile"));
 
 import { ROUTES } from "./routes";
 
@@ -28,31 +43,19 @@ import { ROUTES } from "./routes";
 export const Routes = ROUTES;
 export { ROUTES };
 
-// Helper component to reduce Suspense boilerplate for lazy routes
-const LazyRoute = ({ component: Component }: { component: ComponentType }) => (
-  <Suspense
-    fallback={
-      <div className="w-full h-64 flex items-center justify-center">
-        <Spinner size="lg" />
-      </div>
-    }
-  >
-    <Component />
-  </Suspense>
-);
-
 const router = createBrowserRouter([
   {
     path: "/",
     element: <App />,
+    errorElement: <ChunkLoadErrorFallback />,
     children: [
       {
         path: Routes.AUTH,
         children: [
-          { path: "", element: <LazyRoute component={SignIn} /> },
-          { path: "admin", element: <LazyRoute component={AdminSignIn} /> },
-          { path: "signup", element: <LazyRoute component={SignUp} /> },
-          { path: "callback", element: <LazyRoute component={AuthCallback} /> },
+          { path: "", element: <SignIn /> },
+          { path: "admin", element: <AdminSignIn /> },
+          { path: "signup", element: <SignUp /> },
+          { path: "callback", element: <AuthCallback /> },
         ],
       },
       {
@@ -63,20 +66,18 @@ const router = createBrowserRouter([
             element: <MainLayout />,
             children: [
               { path: "", element: <Home /> },
-              { path: Routes.EXPLORE, element: <LazyRoute component={Explore} /> },
-              { path: Routes.ARCHIVED, element: <LazyRoute component={Archived} /> },
-              { path: "u/:username", element: <LazyRoute component={UserProfile} /> },
+              { path: Routes.EXPLORE, element: <Explore /> },
+              { path: Routes.ARCHIVED, element: <Archived /> },
+              { path: "u/:username", element: <UserProfile /> },
             ],
           },
-          { path: Routes.ATTACHMENTS, element: <LazyRoute component={Attachments} /> },
-          { path: Routes.INBOX, element: <LazyRoute component={Inboxes} /> },
-          { path: Routes.SETTING, element: <LazyRoute component={Setting} /> },
-          { path: "memos/:uid", element: <LazyRoute component={MemoDetail} /> },
-          // Redirect old path to new path
-          { path: "m/:uid", element: <LazyRoute component={MemoDetailRedirect} /> },
-          { path: "403", element: <LazyRoute component={PermissionDenied} /> },
-          { path: "404", element: <LazyRoute component={NotFound} /> },
-          { path: "*", element: <LazyRoute component={NotFound} /> },
+          { path: Routes.ATTACHMENTS, element: <Attachments /> },
+          { path: Routes.INBOX, element: <Inboxes /> },
+          { path: Routes.SETTING, element: <Setting /> },
+          { path: "memos/:uid", element: <MemoDetail /> },
+          { path: "403", element: <PermissionDenied /> },
+          { path: "404", element: <NotFound /> },
+          { path: "*", element: <NotFound /> },
         ],
       },
     ],

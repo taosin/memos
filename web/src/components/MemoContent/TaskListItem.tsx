@@ -3,6 +3,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useUpdateMemo } from "@/hooks/useMemoQueries";
 import { toggleTaskAtIndex } from "@/utils/markdown-manipulation";
 import { useMemoViewContext, useMemoViewDerived } from "../MemoView/MemoViewContext";
+import { TASK_LIST_ITEM_CLASS } from "./constants";
 import type { ReactMarkdownProps } from "./markdown/types";
 
 interface TaskListItemProps extends React.InputHTMLAttributes<HTMLInputElement>, ReactMarkdownProps {
@@ -34,19 +35,17 @@ export const TaskListItem: React.FC<TaskListItemProps> = ({ checked, node: _node
     if (taskIndexStr !== null) {
       taskIndex = parseInt(taskIndexStr);
     } else {
-      // Fallback: Calculate index by counting task list items
-      // Walk up to find the parent element with all task items
-      let searchRoot = listItem.parentElement;
-      while (searchRoot && !searchRoot.classList.contains("contains-task-list")) {
-        searchRoot = searchRoot.parentElement;
-      }
+      // Fallback: Calculate index by counting all task list items in the entire memo
+      // We need to search from the root memo content container, not just the nearest list
+      // to ensure nested tasks are counted in document order
+      let searchRoot = listItem.closest("[data-memo-content]");
 
-      // If not found, search from the document root
+      // If memo content container not found, search from document body
       if (!searchRoot) {
         searchRoot = document.body;
       }
 
-      const allTaskItems = searchRoot.querySelectorAll("li.task-list-item");
+      const allTaskItems = searchRoot.querySelectorAll(`li.${TASK_LIST_ITEM_CLASS}`);
       for (let i = 0; i < allTaskItems.length; i++) {
         if (allTaskItems[i] === listItem) {
           taskIndex = i;

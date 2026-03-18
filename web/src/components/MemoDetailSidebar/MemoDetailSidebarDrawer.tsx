@@ -22,7 +22,7 @@ const MemoDetailSidebarDrawer = ({ memo, parentPage }: Props) => {
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <Button variant="ghost" className="bg-transparent! px-2">
+        <Button variant="ghost" size="sm" className="px-2">
           <GanttChartIcon className="w-5 h-auto text-muted-foreground" />
         </Button>
       </SheetTrigger>

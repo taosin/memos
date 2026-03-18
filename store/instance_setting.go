@@ -169,7 +169,7 @@ func (s *Store) GetInstanceMemoRelatedSetting(ctx context.Context) (*storepb.Ins
 }
 
 const (
-	defaultInstanceStorageType       = storepb.InstanceStorageSetting_DATABASE
+	defaultInstanceStorageType       = storepb.InstanceStorageSetting_LOCAL
 	defaultInstanceUploadSizeLimitMb = 30
 	defaultInstanceFilepathTemplate  = "assets/{timestamp}_{filename}"
 )

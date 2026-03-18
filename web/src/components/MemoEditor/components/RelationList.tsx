@@ -39,7 +39,9 @@ const RelationItemCard: FC<{
 };
 
 const RelationList: FC<RelationListProps> = ({ relations, onRelationsChange, parentPage, memoName }) => {
-  const referenceRelations = relations.filter((r) => r.type === MemoRelation_Type.REFERENCE && (!memoName || r.memo?.name === memoName));
+  const referenceRelations = relations.filter(
+    (r) => r.type === MemoRelation_Type.REFERENCE && (!memoName || !r.memo?.name || r.memo.name === memoName),
+  );
   const [fetchedMemos, setFetchedMemos] = useState<Record<string, MemoRelation_Memo>>({});
 
   useEffect(() => {
@@ -74,7 +76,7 @@ const RelationList: FC<RelationListProps> = ({ relations, onRelationsChange, par
 
   return (
     <div className="w-full rounded-lg border border-border bg-muted/20 overflow-hidden">
-      <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-border bg-muted/30">
+      <div className="flex items-center gap-1.5 px-2 py-1 border-b border-border bg-muted/30">
         <LinkIcon className="w-3.5 h-3.5 text-muted-foreground" />
         <span className="text-xs text-muted-foreground">Relations ({referenceRelations.length})</span>
       </div>

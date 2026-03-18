@@ -1,5 +1,5 @@
 import { timestampDate } from "@bufbuild/protobuf/wkt";
-import { BookmarkIcon, EyeOffIcon, MessageCircleMoreIcon } from "lucide-react";
+import { BookmarkIcon } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -16,20 +16,12 @@ import VisibilityIcon from "../../VisibilityIcon";
 import { useMemoViewContext, useMemoViewDerived } from "../MemoViewContext";
 import type { MemoHeaderProps } from "../types";
 
-const MemoHeader: React.FC<MemoHeaderProps> = ({
-  showCreator,
-  showVisibility,
-  showPinned,
-  onEdit,
-  onGotoDetail,
-  onUnpin,
-  onToggleNsfwVisibility,
-}) => {
+const MemoHeader: React.FC<MemoHeaderProps> = ({ showCreator, showVisibility, showPinned, onEdit, onGotoDetail, onUnpin }) => {
   const t = useTranslate();
   const [reactionSelectorOpen, setReactionSelectorOpen] = useState(false);
 
-  const { memo, creator, currentUser, parentPage, isArchived, readonly, showNSFWContent, nsfw } = useMemoViewContext();
-  const { isInMemoDetailPage, commentAmount, relativeTimeFormat } = useMemoViewDerived();
+  const { memo, creator, currentUser, isArchived, readonly } = useMemoViewContext();
+  const { relativeTimeFormat } = useMemoViewDerived();
 
   const displayTime = isArchived ? (
     (memo.displayTime ? timestampDate(memo.displayTime) : undefined)?.toLocaleString(i18n.language)
@@ -60,18 +52,6 @@ const MemoHeader: React.FC<MemoHeaderProps> = ({
           />
         )}
 
-        {!isInMemoDetailPage && commentAmount > 0 && (
-          <Link
-            className={cn("flex flex-row justify-start items-center rounded-md px-1 hover:opacity-80 gap-0.5")}
-            to={`/${memo.name}#comments`}
-            viewTransition
-            state={{ from: parentPage }}
-          >
-            <MessageCircleMoreIcon className="w-4 h-4 mx-auto text-muted-foreground" />
-            <span className="text-xs text-muted-foreground">{commentAmount}</span>
-          </Link>
-        )}
-
         {showVisibility && memo.visibility !== Visibility.PRIVATE && (
           <Tooltip>
             <TooltipTrigger>
@@ -98,12 +78,6 @@ const MemoHeader: React.FC<MemoHeaderProps> = ({
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-        )}
-
-        {nsfw && showNSFWContent && onToggleNsfwVisibility && (
-          <span className="cursor-pointer">
-            <EyeOffIcon className="w-4 h-auto text-primary" onClick={onToggleNsfwVisibility} />
-          </span>
         )}
 
         <MemoActionMenu memo={memo} readonly={readonly} onEdit={onEdit} />

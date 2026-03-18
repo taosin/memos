@@ -1,8 +1,7 @@
 import { timestampDate } from "@bufbuild/protobuf/wkt";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { setAccessToken } from "@/auth-state";
-import Spinner from "@/components/Spinner";
 import { authServiceClient } from "@/connect";
 import { useAuth } from "@/contexts/AuthContext";
 import { absolutifyLink } from "@/helpers/utils";
@@ -19,12 +18,17 @@ const AuthCallback = () => {
   const navigateTo = useNavigateTo();
   const { initialize } = useAuth();
   const [searchParams] = useSearchParams();
+  const handledRef = useRef(false);
   const [state, setState] = useState<State>({
     loading: true,
     errorMessage: "",
   });
 
   useEffect(() => {
+    if (handledRef.current) {
+      return;
+    }
+    handledRef.current = true;
     // Check for OAuth error response first (e.g., user denied access)
     const error = searchParams.get("error");
     const errorDescription = searchParams.get("error_description");
@@ -68,7 +72,7 @@ const AuthCallback = () => {
       return;
     }
 
-    const { identityProviderId, returnUrl, codeVerifier } = validatedState;
+    const { identityProviderName, returnUrl, codeVerifier } = validatedState;
     const redirectUri = absolutifyLink("/auth/callback");
 
     (async () => {
@@ -77,7 +81,7 @@ const AuthCallback = () => {
           credentials: {
             case: "ssoCredentials",
             value: {
-              idpId: identityProviderId,
+              idpName: identityProviderName,
               code,
               redirectUri,
               codeVerifier: codeVerifier || "", // Pass PKCE code_verifier for token exchange
@@ -110,13 +114,11 @@ const AuthCallback = () => {
     })();
   }, [searchParams, navigateTo]);
 
+  if (state.loading) return null;
+
   return (
     <div className="p-4 py-24 w-full h-full flex justify-center items-center">
-      {state.loading ? (
-        <Spinner size="lg" />
-      ) : (
-        <div className="max-w-lg font-mono whitespace-pre-wrap opacity-80">{state.errorMessage}</div>
-      )}
+      <div className="max-w-lg font-mono whitespace-pre-wrap opacity-80">{state.errorMessage}</div>
     </div>
   );
 };
