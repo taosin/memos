@@ -1,4 +1,5 @@
 import type { Memo } from "@/types/proto/api/v1/memo_service_pb";
+import type { MemoOriginScope } from "./navigation";
 
 export interface MemoViewProps {
   memo: Memo;
@@ -6,22 +7,21 @@ export interface MemoViewProps {
   showCreator?: boolean;
   showVisibility?: boolean;
   showPinned?: boolean;
+  showSpace?: boolean;
   className?: string;
   parentPage?: string;
+  parentScope?: MemoOriginScope;
+  shareImageDialogOpen?: boolean;
+  onShareImageDialogOpenChange?: (open: boolean) => void;
 }
 
 export interface MemoHeaderProps {
   showCreator?: boolean;
   showVisibility?: boolean;
   showPinned?: boolean;
-  onEdit: () => void;
-  onGotoDetail: () => void;
-  onUnpin: () => void;
+  showSpace?: boolean;
 }
 
 export interface MemoBodyProps {
   compact?: boolean;
-  onContentClick: (e: React.MouseEvent) => void;
-  onContentDoubleClick: (e: React.MouseEvent) => void;
-  onToggleNsfwVisibility: () => void;
 }

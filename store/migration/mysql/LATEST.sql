@@ -11,7 +11,7 @@ CREATE TABLE `user` (
   `created_ts` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_ts` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `row_status` VARCHAR(256) NOT NULL DEFAULT 'NORMAL',
-  `username` VARCHAR(256) NOT NULL UNIQUE,
+  `username` VARCHAR(256) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL UNIQUE,
   `role` VARCHAR(256) NOT NULL DEFAULT 'USER',
   `email` VARCHAR(256) NOT NULL DEFAULT '',
   `nickname` VARCHAR(256) NOT NULL DEFAULT '',
@@ -28,6 +28,25 @@ CREATE TABLE `user_setting` (
   UNIQUE(`user_id`,`key`)
 );
 
+-- space
+CREATE TABLE `space` (
+  `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `uid` VARCHAR(256) NOT NULL UNIQUE,
+  `title` TEXT NOT NULL,
+  `description` TEXT NOT NULL
+);
+
+-- space membership
+CREATE TABLE `space_member` (
+  `space_id` INT NOT NULL,
+  `user_id` INT NOT NULL,
+  `status` VARCHAR(256) NOT NULL,
+  `role` VARCHAR(256) NOT NULL CHECK (`role` IN ('ADMIN', 'USER')),
+  PRIMARY KEY (`space_id`, `user_id`)
+);
+
+CREATE INDEX `idx_space_member_user_id` ON `space_member`(`user_id`, `space_id`);
+
 -- memo
 CREATE TABLE `memo` (
   `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -39,8 +58,11 @@ CREATE TABLE `memo` (
   `content` TEXT NOT NULL,
   `visibility` VARCHAR(256) NOT NULL DEFAULT 'PRIVATE',
   `pinned` BOOLEAN NOT NULL DEFAULT FALSE,
-  `payload` JSON NOT NULL
+  `payload` JSON NOT NULL,
+  `space_id` INT DEFAULT NULL
 );
+
+CREATE INDEX `idx_memo_space_id` ON `memo`(`space_id`, `row_status`, `created_ts`, `id`);
 
 -- memo_relation
 CREATE TABLE `memo_relation` (
@@ -49,6 +71,9 @@ CREATE TABLE `memo_relation` (
   `type` VARCHAR(256) NOT NULL,
   UNIQUE(`memo_id`,`related_memo_id`,`type`)
 );
+
+CREATE INDEX `idx_memo_relation_related_type_memo`
+  ON `memo_relation`(`related_memo_id`, `type`, `memo_id`);
 
 -- attachment
 CREATE TABLE `attachment` (
@@ -64,16 +89,6 @@ CREATE TABLE `attachment` (
   `memo_id` INT DEFAULT NULL,
   `storage_type` VARCHAR(256) NOT NULL DEFAULT '',
   `reference` TEXT NOT NULL DEFAULT (''),
-  `payload` TEXT NOT NULL
-);
-
--- activity
-CREATE TABLE `activity` (
-  `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  `creator_id` INT NOT NULL,
-  `created_ts` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `type` VARCHAR(256) NOT NULL DEFAULT '',
-  `level` VARCHAR(256) NOT NULL DEFAULT 'INFO',
   `payload` TEXT NOT NULL
 );
 
@@ -97,12 +112,39 @@ CREATE TABLE `inbox` (
   `message` TEXT NOT NULL
 );
 
--- reaction
+-- memo reaction
 CREATE TABLE `reaction` (
   `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
   `created_ts` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `creator_id` INT NOT NULL,
-  `content_id` VARCHAR(256) NOT NULL,
+  `memo_id` INT NOT NULL,
   `reaction_type` VARCHAR(256) NOT NULL,
-  UNIQUE(`creator_id`,`content_id`,`reaction_type`)  
+  UNIQUE(`creator_id`,`memo_id`,`reaction_type`)
 );
+
+-- memo_share
+CREATE TABLE `memo_share` (
+  `id`         INT          NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `uid`        VARCHAR(255) NOT NULL UNIQUE,
+  `memo_id`    INT          NOT NULL,
+  `creator_id` INT          NOT NULL,
+  `created_ts` BIGINT       NOT NULL DEFAULT (UNIX_TIMESTAMP()),
+  `expires_ts` BIGINT       DEFAULT NULL,
+  FOREIGN KEY (`memo_id`) REFERENCES `memo`(`id`) ON DELETE CASCADE
+);
+
+CREATE INDEX `idx_memo_share_memo_id` ON `memo_share`(`memo_id`);
+
+-- user_identity
+CREATE TABLE `user_identity` (
+  `id`         INT          NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `user_id`    INT          NOT NULL,
+  `provider`   VARCHAR(256) NOT NULL,
+  `extern_uid` VARCHAR(256) NOT NULL,
+  `created_ts` BIGINT       NOT NULL DEFAULT (UNIX_TIMESTAMP()),
+  `updated_ts` BIGINT       NOT NULL DEFAULT (UNIX_TIMESTAMP()),
+  UNIQUE (`provider`, `extern_uid`),
+  UNIQUE (`user_id`, `provider`)
+);
+
+CREATE INDEX `idx_user_identity_user_id` ON `user_identity`(`user_id`);

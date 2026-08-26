@@ -10,6 +10,7 @@
     "create-your-account": "أنشئ حسابك",
     "host-tip": "أنت تسجل في الموقع كمضيف",
     "new-password": "كلمة المرور الجديدة",
+    "protected-memo-notice": "This memo is not public. Sign in to continue.",
     "repeat-new-password": "أعد كلمة المرور الجديدة",
     "sign-in-tip": "هل لديك حساب بالفعل؟",
     "sign-up-tip": "ليس لديك حساب بعد؟"
@@ -22,7 +23,6 @@
     "archive": "الأرشيف",
     "archived": "المؤرشفة",
     "attachments": "مرفقات",
-    "auto-expand": "توسيع تلقائي",
     "avatar": "الصورة الشخصية",
     "basic": "بسيط",
     "beta": "تجريبي",
@@ -38,7 +38,15 @@
     "created-at": "تاريخ الإنشاء",
     "database": "قاعدة البيانات",
     "day": "يوم",
-    "days": "أيام",
+    "days": {
+      "fri": "جمعة",
+      "mon": "إثنين",
+      "sat": "سبت",
+      "sun": "أحد",
+      "thu": "خميس",
+      "tue": "ثلاثاء",
+      "wed": "أربعاء"
+    },
     "delete": "حذف",
     "description": "الوصف",
     "edit": "تعديل",
@@ -54,9 +62,9 @@
     "input": "إدخال",
     "language": "اللغة",
     "last-updated-at": "آخر تحديث في",
-    "layout": "تخطيط",
     "learn-more": "تعلم المزيد",
     "link": "الرابط",
+    "manage": "إدارة",
     "map": "خريطة",
     "mark": "تعليم",
     "memo": "مذكرة",
@@ -87,8 +95,6 @@
     "select": "تحديد",
     "settings": "الإعدادات",
     "share": "مشاركة",
-    "shortcut-filter": "تصفية الاختصارات",
-    "shortcuts": "اختصارات",
     "sign-in": "تسجيل الدخول",
     "sign-in-with": "تسجيل دخول بواسطة {{provider}}",
     "sign-out": "تسجيل خروج",
@@ -106,16 +112,11 @@
     "username": "اسم المستخدم",
     "version": "الإصدار",
     "visibility": "الرؤية",
+    "views": "طرق العرض",
     "yourself": "نفسك"
   },
-  "days": {
-    "fri": "جمعة",
-    "mon": "إثنين",
-    "sat": "سبت",
-    "sun": "أحد",
-    "thu": "خميس",
-    "tue": "ثلاثاء",
-    "wed": "أربعاء"
+  "locale-picker": {
+    "no-language-feedback": "لم يتم العثور على اللغة؟ إرسال ردود الفعل"
   },
   "editor": {
     "add-your-comment-here": "أضف تعليقك هنا...",
@@ -125,12 +126,36 @@
     "no-changes-detected": "لم يتم الكشف عن تغييرات",
     "save": "حفظ",
     "saving": "جارِ الحفظ...",
-    "slash-commands": "اكتب `/` للأوامر"
-  },
-  "filters": {
-    "has-code": "يحتوي على كود",
-    "has-link": "يحتوي على رابط",
-    "has-task-list": "يحتوي على قائمة مهام"
+    "insert-menu": {
+      "add-location": "أضف الموقع",
+      "link-memo": "مذكرة الارتباط",
+      "upload-file": "تحميل الملف"
+    },
+    "audio-recorder": {
+      "attachment-label": "تسجيل صوتي",
+      "attachment-label-with-time": "تسجيل صوتي {{time}}",
+      "discard": "تجاهل",
+      "error": "الميكروفون غير متوفر",
+      "error-description": "حاول مرة أخرى بعد التحقق من وصول الميكروفون لهذا الموقع.",
+      "idle-description": "ابدأ التسجيل لإضافة تسجيل صوتي كمرفق.",
+      "keep": "استمر في التسجيل",
+      "pause-recording": "إيقاف التسجيل الصوتي مؤقتًا",
+      "play-recording": "تشغيل التسجيل الصوتي",
+      "ready": "التسجيل جاهز",
+      "ready-description": "قم بمعاينة المقطع، ثم احتفظ به كمرفق صوتي أو تجاهله.",
+      "record-again": "سجل مرة أخرى",
+      "recording": "تسجيل الصوت",
+      "recording-description": "التقاط مرفق صوتي سريع. الطول الحالي: {{duration}}",
+      "requesting": "جارٍ طلب الوصول...",
+      "requesting-permission": "طلب الوصول إلى الميكروفون",
+      "requesting-permission-description": "اسمح بالوصول إلى الميكروفون في متصفحك لبدء التسجيل.",
+      "start": "ابدأ التسجيل",
+      "stop": "توقف عن التسجيل",
+      "title": "مسجل الصوت",
+      "trigger": "تسجيل الصوت",
+      "unsupported": "التسجيل الصوتي غير مدعوم",
+      "unsupported-description": "لا يمكن لهذا المتصفح تسجيل الصوت من مؤلف المذكرة."
+    }
   },
   "inbox": {
     "failed-to-load": "فشل تحميل عنصر صندوق الوارد",
@@ -146,8 +171,8 @@
   },
   "memo": {
     "archived-at": "تاريخ الأرشفة",
-    "click-to-hide-nsfw-content": "انقر لإخفاء المحتوى الحساس",
-    "click-to-show-nsfw-content": "انقر لإظهار المحتوى الحساس",
+    "click-to-hide-sensitive-content": "انقر لإخفاء المحتوى الحساس",
+    "click-to-show-sensitive-content": "انقر لإظهار المحتوى الحساس",
     "code": "كود",
     "comment": {
       "self": "التعليقات",
@@ -162,11 +187,17 @@
     "direction-asc": "تصاعدي",
     "direction-desc": "تنازلي",
     "display-time": "عرض الوقت",
-    "filters": "فلاتر",
+    "filters": {
+      "has-code": "يحتوي على كود",
+      "has-link": "يحتوي على رابط",
+      "has-location": "يحتوي على موقع",
+      "has-task-list": "يحتوي على قائمة مهام",
+      "label": "المرشحات"
+    },
+    "compact-mode": "الوضع المضغوط",
+    "link-preview": "معاينة الرابط",
     "links": "روابط",
-    "list": "قائمة",
     "load-more": "تحميل المزيد",
-    "masonry": "فسيفساء",
     "no-archived-memos": "لا يوجد مذكرات مؤرشفة",
     "no-memos": "لا يوجد مذكرات.",
     "order-by": "ترتيب حسب",
@@ -180,6 +211,32 @@
       "private": "خاص",
       "protected": "محمي",
       "public": "عام"
+    },
+    "outline": "الخطوط العريضة",
+    "share": {
+      "active-links": "روابط المشاركة النشطة",
+      "copied": "منسوخ!",
+      "copy": "انسخ الرابط",
+      "create-failed": "فشل إنشاء رابط المشاركة",
+      "create-link": "إنشاء رابط جديد",
+      "creating": "جارٍ الإنشاء…",
+      "expiry-1-day": "يوم واحد",
+      "expiry-30-days": "30 يوما",
+      "expiry-7-days": "7 أيام",
+      "expiry-label": "تنتهي",
+      "expiry-never": "أبدا",
+      "expires-on": "تنتهي صلاحيته في {{date}}",
+      "invalid-link": "هذا الرابط غير صالح أو انتهت صلاحيته.",
+      "never-expires": "لا تنتهي صلاحيته أبدًا",
+      "no-links": "لا توجد روابط مشاركة حتى الآن. قم بإنشاء واحد أدناه.",
+      "open-panel": "إدارة روابط المشاركة",
+      "revoke": "إبطال",
+      "revoke-failed": "فشل في إلغاء الارتباط",
+      "revoked": "تم إبطال رابط المشاركة",
+      "section-label": "المشاركة",
+      "share": "شارك",
+      "shared-by": "تمت المشاركة بواسطة {{creator}}",
+      "title": "شارك هذه المذكرة"
     }
   },
   "message": {
@@ -251,53 +308,7 @@
     "go-to-home": "اذهب إلى الصفحة الرئيسية"
   },
   "setting": {
-    "access-token-section": {
-      "access-token-copied-to-clipboard": "تم نسخ رمز الوصول إلى الحافظة",
-      "access-token-deleted": "تم حذف رمز الوصول `{{description}}`",
-      "access-token-deletion": "هل أنت متأكد من حذف رمز الوصول `{{description}}`؟",
-      "access-token-deletion-description": "هذا الإجراء لا رجعة فيه. ستحتاج إلى تحديث أي خدمات تستخدم هذا الرمز لاستخدام رمز جديد.",
-      "create-dialog": {
-        "access-token-created": "تم إنشاء رمز الوصول `{{description}}`",
-        "create-access-token": "إنشاء رمز وصول",
-        "created-at": "تاريخ الإنشاء",
-        "description": "الوصف",
-        "duration-1m": "شهر واحد",
-        "duration-8h": "8 ساعات",
-        "duration-never": "أبدًا",
-        "expiration": "انتهاء الصلاحية",
-        "expires-at": "ينتهي في",
-        "some-description": "بعض الوصف..."
-      },
-      "description": "قائمة بجميع رموز الوصول لحسابك.",
-      "title": "رموز الوصول",
-      "token": "رمز"
-    },
-    "account-section": {
-      "change-password": "تغيير كلمة المرور",
-      "email-note": "اختياري",
-      "export-memos": "تصدير المذكرات",
-      "nickname-note": "معروض في اللافتة",
-      "openapi-reset": "إعادة ضبط مفتاح OpenAPI",
-      "openapi-sample-post": "مرحبًا #مذكراتي من {{url}}",
-      "openapi-title": "OpenAPI",
-      "reset-api": "إعادة ضبط الـ API",
-      "title": "معلومات الحساب",
-      "update-information": "تحديث المعلومات",
-      "username-note": "تستخدم لتسجيل الدخول"
-    },
-    "instance-section": {
-      "disallow-change-nickname": "عدم السماح بتغيير الاسم المستعار",
-      "disallow-change-username": "عدم السماح بتغيير اسم المستخدم",
-      "disallow-password-auth": "عدم السماح بالمصادقة بكلمة المرور",
-      "disallow-user-registration": "عدم السماح بتسجيل المستخدمين",
-      "monday": "الإثنين",
-      "saturday": "السبت",
-      "sunday": "الأحد",
-      "week-start-day": "بداية الأسبوع"
-    },
-    "member": "عضو",
-    "member-list": "قائمة الأعضاء",
-    "member-section": {
+    "member": {
       "admin": "مدير",
       "archive-member": "أرشفة العضو",
       "archive-success": "تم أرشفة {{username}} بنجاح",
@@ -309,30 +320,25 @@
       "delete-warning": "هل أنت متأكد من حذف {{username}}؟ هذا الإجراء لا رجعة فيه",
       "delete-warning-description": "هذا الإجراء لا رجعة فيه",
       "restore-success": "تم استعادة {{username}} بنجاح",
-      "user": "مستخدم"
+      "user": "مستخدم",
+      "label": "عضو",
+      "list-title": "قائمة الأعضاء",
+      "no-members-found": "لم يتم العثور على أعضاء"
     },
-    "memo-related": "مذكرة",
-    "memo-related-settings": {
-      "content-length-limit": "حد طول المحتوى (بايت)",
-      "enable-blur-nsfw-content": "تمكين طمس المحتوى الحساس (NSFW)",
-      "enable-memo-comments": "تمكين تعليقات المذكرة",
-      "enable-memo-location": "تمكين موقع المذكرة",
-      "reactions": "تفاعلات",
-      "title": "إعدادات المذكرة"
+    "my-account": {
+      "label": "حسابي"
     },
-    "my-account": "حسابي",
-    "preference": "التفضيلات",
-    "preference-section": {
+    "preference": {
       "default-memo-sort-option": "وقت عرض المذكرة",
       "default-memo-visibility": "رؤية المذكرة الافتراضية",
-      "theme": "السمة"
+      "theme": "السمة",
+      "label": "التفضيلات"
     },
-    "shortcut": {
-      "delete-confirm": "هل أنت متأكد من حذف الاختصار `{{title}}`؟",
-      "delete-success": "تم حذف الاختصار `{{title}}` بنجاح"
+    "memo-view": {
+      "delete-confirm": "هل أنت متأكد من حذف طريقة العرض `{{title}}`؟",
+      "delete-success": "تم حذف طريقة العرض `{{title}}` بنجاح"
     },
-    "sso": "تسجيل موحد",
-    "sso-section": {
+    "sso": {
       "authorization-endpoint": "نقطة نهاية التفويض",
       "client-id": "معرف العميل",
       "client-secret": "سر العميل",
@@ -354,10 +360,10 @@
       "template": "قالب",
       "token-endpoint": "نقطة نهاية الرمز",
       "update-sso": "تحديث SSO",
-      "user-endpoint": "نقطة نهاية المستخدم"
+      "user-endpoint": "نقطة نهاية المستخدم",
+      "label": "تسجيل موحد"
     },
-    "storage": "المساحة التخزينية",
-    "storage-section": {
+    "storage": {
       "accesskey": "مفتاح الوصول",
       "accesskey-placeholder": "مفتاح الوصول / معرف الوصول",
       "bucket": "دلو التخزين",
@@ -372,7 +378,6 @@
       "path": "مسار التخزين",
       "path-description": "يمكنك استخدام نفس المتغيرات الديناميكية من التخزين المحلي، مثل {filename}",
       "path-placeholder": "مسار/مخصص",
-      "presign-placeholder": "رابط توقيع مسبق، اختياري",
       "region": "المنطقة",
       "region-placeholder": "اسم المنطقة",
       "s3-compatible-url": "رابط متوافق مع S3",
@@ -389,10 +394,10 @@
       "url-prefix-placeholder": "بادئة رابط مخصصة، اختياري",
       "url-suffix": "لاحقة الرابط",
       "url-suffix-placeholder": "لاحقة رابط مخصصة، اختياري",
-      "warning-text": "هل أنت متأكد من حذف خدمة التخزين \"{{name}}\"؟ هذا الإجراء لا رجعة فيه"
+      "warning-text": "هل أنت متأكد من حذف خدمة التخزين \"{{name}}\"؟ هذا الإجراء لا رجعة فيه",
+      "label": "المساحة التخزينية"
     },
-    "system": "النظام",
-    "system-section": {
+    "system": {
       "additional-script": "سكريبت إضافي",
       "additional-script-placeholder": "كود JavaScript إضافي",
       "additional-style": "نمط إضافي",
@@ -407,7 +412,6 @@
       "disable-password-login": "تعطيل تسجيل الدخول بكلمة المرور",
       "disable-password-login-final-warning": "يرجى كتابة \"CONFIRM\" إذا كنت متأكدًا مما تفعله.",
       "disable-password-login-warning": "سيؤدي ذلك إلى تعطيل تسجيل الدخول بكلمة المرور لجميع المستخدمين. لا يمكن تسجيل الدخول بدون التراجع عن هذا الإعداد في قاعدة البيانات إذا فشل مزودو الهوية. يجب أن تكون حذرًا عند إزالة مزود هوية",
-      "disable-public-memos": "تعطيل المذكرات العامة",
       "display-with-updated-time": "العرض مع وقت التحديث",
       "enable-auto-compact": "تمكين الضغط التلقائي",
       "enable-double-click-to-edit": "تمكين النقر المزدوج للتحرير",
@@ -417,10 +421,66 @@
       "max-upload-size-hint": "القيمة الموصى بها هي 32 ميغابايت.",
       "removed-completed-task-list-items": "تمكين إزالة عناصر قائمة المهام المكتملة",
       "server-name": "اسم الخادم",
-      "title": "عام"
+      "title": "عام",
+      "label": "النظام"
     },
     "version": "الإصدار",
-    "webhook-section": {
+    "access-token": {
+      "access-token-copied-to-clipboard": "تم نسخ رمز الوصول إلى الحافظة",
+      "access-token-deleted": "تم حذف رمز الوصول `{{description}}`",
+      "access-token-deletion": "هل أنت متأكد من حذف رمز الوصول `{{description}}`؟",
+      "access-token-deletion-description": "هذا الإجراء لا رجعة فيه. ستحتاج إلى تحديث أي خدمات تستخدم هذا الرمز لاستخدام رمز جديد.",
+      "create-dialog": {
+        "access-token-created": "تم إنشاء رمز الوصول `{{description}}`",
+        "create-access-token": "إنشاء رمز وصول",
+        "created-at": "تاريخ الإنشاء",
+        "description": "الوصف",
+        "duration-1m": "شهر واحد",
+        "duration-8h": "8 ساعات",
+        "duration-never": "أبدًا",
+        "expiration": "انتهاء الصلاحية",
+        "expires-at": "ينتهي في",
+        "some-description": "بعض الوصف..."
+      },
+      "description": "قائمة بجميع رموز الوصول لحسابك.",
+      "title": "رموز الوصول",
+      "token": "رمز",
+      "no-tokens-found": "لم يتم العثور على رموز الوصول"
+    },
+    "account": {
+      "change-password": "تغيير كلمة المرور",
+      "email-note": "اختياري",
+      "export-memos": "تصدير المذكرات",
+      "nickname-note": "معروض في اللافتة",
+      "openapi-reset": "إعادة ضبط مفتاح OpenAPI",
+      "openapi-sample-post": "مرحبًا #مذكراتي من {{url}}",
+      "openapi-title": "OpenAPI",
+      "reset-api": "إعادة ضبط الـ API",
+      "title": "معلومات الحساب",
+      "update-information": "تحديث المعلومات",
+      "username-note": "تستخدم لتسجيل الدخول"
+    },
+    "instance": {
+      "disallow-change-nickname": "عدم السماح بتغيير الاسم المستعار",
+      "disallow-change-username": "عدم السماح بتغيير اسم المستخدم",
+      "disallow-password-auth": "عدم السماح بالمصادقة بكلمة المرور",
+      "disallow-user-registration": "عدم السماح بتسجيل المستخدمين",
+      "monday": "الإثنين",
+      "saturday": "السبت",
+      "sunday": "الأحد",
+      "week-start-day": "بداية الأسبوع"
+    },
+    "memo": {
+      "content-length-limit": "حد طول المحتوى (بايت)",
+      "enable-blur-sensitive-content": "تمكين طمس المحتوى الحساس (NSFW)",
+      "enable-memo-comments": "تمكين تعليقات المذكرة",
+      "enable-memo-location": "تمكين موقع المذكرة",
+      "reactions": "تفاعلات",
+      "title": "إعدادات المذكرة",
+      "label": "مذكرة",
+      "reactions-required": "يجب ألا تكون قائمة التفاعلات فارغة"
+    },
+    "webhook": {
       "create-dialog": {
         "an-easy-to-remember-name": "اسم سهل التذكر",
         "create-webhook": "إنشاء Webhook",
@@ -437,7 +497,22 @@
       },
       "no-webhooks-found": "لم يتم العثور على Webhooks.",
       "title": "Webhooks",
-      "url": "الرابط"
+      "url": "الرابط",
+      "label": "Webhooks"
+    },
+    "tags": {
+      "label": "العلامات",
+      "title": "البيانات الوصفية للعلامة",
+      "description": "قم بتعيين ألوان عرض اختيارية للعلامات على مستوى المثيل، أو قم بطمس محتوى المذكرة المطابق. يتم التعامل مع أسماء العلامات كأنماط regex الراسخة.",
+      "background-color": "لون الخلفية",
+      "blur-content": "طمس المحتوى",
+      "no-tags-configured": "لم يتم تكوين بيانات تعريف العلامة.",
+      "tag-name": "اسم العلامة",
+      "tag-name-placeholder": "على سبيل المثال work أو project/.*",
+      "tag-already-exists": "العلامة موجودة بالفعل.",
+      "tag-pattern-hint": "اسم العلامة أو نمط التعبير العادي (على سبيل المثال، project/.* يتطابق مع جميع علامات project/)",
+      "invalid-regex": "نمط التعبير العادي غير صالح أو غير آمن.",
+      "using-default-color": "باستخدام اللون الافتراضي."
     }
   },
   "tag": {
@@ -463,5 +538,10 @@
     "select-visibility": "الرؤية",
     "tags": "العلامات",
     "upload-attachment": "رفع المرفق"
+  },
+  "live-update": {
+    "connected": "التحديثات الحية نشطة",
+    "connecting": "جارٍ الاتصال بالتحديثات المباشرة...",
+    "disconnected": "التحديثات المباشرة غير متوفرة"
   }
 }

@@ -1,10 +1,24 @@
 import { create } from "@bufbuild/protobuf";
 import { FieldMaskSchema } from "@bufbuild/protobuf/wkt";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { shortcutServiceClient, userServiceClient } from "@/connect";
-import { buildUserSettingName } from "@/helpers/resource-names";
+import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { memoViewServiceClient, userServiceClient } from "@/connect";
 import useCurrentUser from "@/hooks/useCurrentUser";
-import { User, UserSetting, UserSetting_GeneralSetting, UserSetting_Key, UserSettingSchema } from "@/types/proto/api/v1/user_service_pb";
+import { buildUserSettingName, userNamePrefix } from "@/lib/resource-names";
+import { mergeTagCounts } from "@/lib/tag";
+import {
+  type ListAllUserStatsRequest,
+  ListAllUserStatsRequestSchema,
+  User,
+  UserSetting,
+  UserSetting_GeneralSetting,
+  UserSetting_Key,
+  UserSettingSchema,
+  UserStats,
+} from "@/types/proto/api/v1/user_service_pb";
+
+const BATCH_GET_USERS_LIMIT = 100;
+const USER_PROFILE_STALE_TIME = 1000 * 60 * 5;
+type ListAllUserStatsQuery = Pick<ListAllUserStatsRequest, "state" | "filter">;
 
 // Query keys factory
 export const userKeys = {
@@ -12,46 +26,64 @@ export const userKeys = {
   details: () => [...userKeys.all, "detail"] as const,
   detail: (name: string) => [...userKeys.details(), name] as const,
   stats: () => [...userKeys.all, "stats"] as const,
-  userStats: (name: string) => [...userKeys.stats(), name] as const,
+  userStats: (name: string, filter?: string) =>
+    filter ? ([...userKeys.stats(), name, filter] as const) : ([...userKeys.stats(), name] as const),
+  allUserStats: (request: Partial<ListAllUserStatsQuery>) => [...userKeys.stats(), "all", request] as const,
   currentUser: () => [...userKeys.all, "current"] as const,
-  shortcuts: () => [...userKeys.all, "shortcuts"] as const,
+  memoViews: (parent?: string) => [...userKeys.all, "memoViews", parent] as const,
   notifications: () => [...userKeys.all, "notifications"] as const,
-  byNames: (names: string[]) => [...userKeys.all, "byNames", ...names.sort()] as const,
+  byNames: (names: string[]) => [...userKeys.all, "byNames", ...[...names].sort()] as const,
+  byUsernames: (usernames: string[]) => [...userKeys.all, "byUsernames", ...[...usernames].sort()] as const,
 };
+
+export const userDetailQueryOptions = (name: string) =>
+  queryOptions({
+    queryKey: userKeys.detail(name),
+    queryFn: () => userServiceClient.getUser({ name }),
+    staleTime: USER_PROFILE_STALE_TIME,
+  });
 
 export function useUser(name: string, options?: { enabled?: boolean }) {
   return useQuery({
-    queryKey: userKeys.detail(name),
-    queryFn: async () => {
-      const user = await userServiceClient.getUser({ name });
-      return user;
-    },
+    ...userDetailQueryOptions(name),
     enabled: options?.enabled ?? true,
-    staleTime: 1000 * 60 * 5, // 5 minutes - user profiles don't change often
   });
 }
 
-export function useUserStats(username?: string) {
+export function useUserStats(username?: string, options?: { enabled?: boolean; filter?: string }) {
   return useQuery({
-    queryKey: username ? userKeys.userStats(username) : userKeys.stats(),
+    queryKey: username ? userKeys.userStats(username, options?.filter) : userKeys.stats(),
     queryFn: async () => {
       if (!username) {
         throw new Error("Username is required");
       }
-      const stats = await userServiceClient.getUserStats({ name: username });
+      const stats = await userServiceClient.getUserStats({ name: username, filter: options?.filter });
       return stats;
     },
-    enabled: !!username,
+    enabled: !!username && (options?.enabled ?? true),
   });
 }
 
-export function useShortcuts() {
+export function useAllUserStats(request: Partial<ListAllUserStatsQuery> = {}, options?: { enabled?: boolean }) {
   return useQuery({
-    queryKey: userKeys.shortcuts(),
+    queryKey: userKeys.allUserStats(request),
     queryFn: async () => {
-      const { shortcuts } = await shortcutServiceClient.listShortcuts({});
-      return shortcuts;
+      const { stats } = await userServiceClient.listAllUserStats(create(ListAllUserStatsRequestSchema, request));
+      return stats;
     },
+    enabled: options?.enabled ?? true,
+  });
+}
+
+export function useMemoViews(parent?: string) {
+  return useQuery({
+    queryKey: userKeys.memoViews(parent),
+    queryFn: async () => {
+      if (!parent) return [];
+      const { memoViews } = await memoViewServiceClient.listMemoViews({ parent });
+      return memoViews;
+    },
+    enabled: !!parent,
   });
 }
 
@@ -75,31 +107,30 @@ export function useNotifications() {
 export function useTagCounts(forCurrentUser = false) {
   const currentUser = useCurrentUser();
 
-  return useQuery({
-    queryKey: forCurrentUser ? [...userKeys.stats(), "tagCounts", "current"] : [...userKeys.stats(), "tagCounts", "all"],
-    queryFn: async () => {
+  return useQuery<UserStats | Record<string, number>, Error, Record<string, number>>({
+    queryKey:
+      forCurrentUser && currentUser?.name
+        ? userKeys.userStats(currentUser.name)
+        : [...userKeys.stats(), "tagCounts", forCurrentUser ? "current" : "all"],
+    queryFn: async (): Promise<UserStats | Record<string, number>> => {
       if (forCurrentUser) {
-        // Fetch current user stats only
         if (!currentUser?.name) {
           return {};
         }
-        const stats = await userServiceClient.getUserStats({ name: currentUser.name });
-        return stats.tagCount || {};
+        return userServiceClient.getUserStats({ name: currentUser.name });
       } else {
         // Fetch all user stats
         const { stats } = await userServiceClient.listAllUserStats({});
 
         // Aggregate tag counts from all users
-        const tagCount: Record<string, number> = {};
-        for (const userStats of stats) {
-          if (userStats.tagCount) {
-            for (const [tag, count] of Object.entries(userStats.tagCount)) {
-              tagCount[tag] = (tagCount[tag] || 0) + count;
-            }
-          }
-        }
-        return tagCount;
+        return mergeTagCounts(...stats.map((userStats) => userStats.tagCount));
       }
+    },
+    select: (data) => {
+      if (forCurrentUser) {
+        return mergeTagCounts((data as UserStats).tagCount);
+      }
+      return data as Record<string, number>;
     },
     enabled: !forCurrentUser || !!currentUser?.name,
     staleTime: 1000 * 60 * 2, // 2 minutes - tags don't change frequently
@@ -144,12 +175,9 @@ export function useUserSettings(parent?: string) {
   return useQuery({
     queryKey: [...userKeys.all, "settings", parent],
     queryFn: async () => {
-      if (!parent) return { settings: [], shortcuts: [] };
-      const [{ settings }, { shortcuts }] = await Promise.all([
-        userServiceClient.listUserSettings({ parent }),
-        shortcutServiceClient.listShortcuts({ parent }),
-      ]);
-      return { settings, shortcuts };
+      if (!parent) return { settings: [] };
+      const { settings } = await userServiceClient.listUserSettings({ parent });
+      return { settings };
     },
     enabled: !!parent,
   });
@@ -173,12 +201,18 @@ export function useUpdateUserSetting() {
   });
 }
 
-// Hook to list all users
+// Hook to list all users, paging through every result.
 export function useListUsers() {
   return useQuery({
     queryKey: userKeys.all,
     queryFn: async () => {
-      const { users } = await userServiceClient.listUsers({});
+      const users: User[] = [];
+      let pageToken = "";
+      do {
+        const response = await userServiceClient.listUsers({ pageToken });
+        users.push(...response.users);
+        pageToken = response.nextPageToken;
+      } while (pageToken);
       return users;
     },
   });
@@ -216,8 +250,9 @@ export function useUpdateUserGeneralSetting(currentUserName?: string) {
 }
 
 // Hook to fetch multiple users by names (returns Map<name, User>)
-export function useUsersByNames(names: string[]) {
-  const enabled = names.length > 0;
+export function useUsersByNames(names: string[], options?: { enabled?: boolean }) {
+  const queryClient = useQueryClient();
+  const enabled = (options?.enabled ?? true) && names.length > 0;
   const uniqueNames = Array.from(new Set(names));
 
   return useQuery({
@@ -226,7 +261,7 @@ export function useUsersByNames(names: string[]) {
       const users = await Promise.all(
         uniqueNames.map(async (name) => {
           try {
-            const user = await userServiceClient.getUser({ name });
+            const user = await queryClient.fetchQuery(userDetailQueryOptions(name));
             return { name, user };
           } catch {
             return { name, user: undefined };
@@ -241,6 +276,52 @@ export function useUsersByNames(names: string[]) {
       return userMap;
     },
     enabled,
-    staleTime: 1000 * 60 * 5, // 5 minutes - user profiles don't change often
+    staleTime: USER_PROFILE_STALE_TIME,
+  });
+}
+
+// Hook to fetch multiple users by usernames (returns Map<username, User>)
+export function useUsersByUsernames(usernames: string[], options?: { enabled?: boolean }) {
+  const queryClient = useQueryClient();
+  const enabled = (options?.enabled ?? true) && usernames.length > 0;
+  const uniqueUsernames = Array.from(new Set(usernames));
+
+  return useQuery({
+    queryKey: userKeys.byUsernames(uniqueUsernames),
+    queryFn: async () => {
+      const usersByUsername = new Map<string, User>();
+      const missingUsernames: string[] = [];
+      for (const username of uniqueUsernames) {
+        const detailKey = userKeys.detail(`${userNamePrefix}${username}`);
+        const cachedUser = queryClient.getQueryData<User>(detailKey);
+        const cachedState = queryClient.getQueryState(detailKey);
+        const cacheIsFresh = cachedState ? Date.now() - cachedState.dataUpdatedAt < USER_PROFILE_STALE_TIME : false;
+        if (cachedUser && cacheIsFresh) {
+          usersByUsername.set(username, cachedUser);
+        } else {
+          missingUsernames.push(username);
+        }
+      }
+
+      const batches = [];
+      for (let i = 0; i < missingUsernames.length; i += BATCH_GET_USERS_LIMIT) {
+        batches.push(missingUsernames.slice(i, i + BATCH_GET_USERS_LIMIT));
+      }
+
+      const responses = await Promise.all(batches.map((batch) => userServiceClient.batchGetUsers({ usernames: batch })));
+      const users = responses.flatMap((response) => response.users);
+      for (const user of users) {
+        usersByUsername.set(user.username, user);
+        queryClient.setQueryData(userKeys.detail(user.name), user);
+      }
+
+      const userMap = new Map<string, User | undefined>();
+      for (const username of uniqueUsernames) {
+        userMap.set(username, usersByUsername.get(username));
+      }
+      return userMap;
+    },
+    enabled,
+    staleTime: USER_PROFILE_STALE_TIME,
   });
 }

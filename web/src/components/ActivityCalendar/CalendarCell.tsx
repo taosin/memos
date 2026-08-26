@@ -3,7 +3,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 import { DEFAULT_CELL_SIZE, SMALL_CELL_SIZE } from "./constants";
 import type { CalendarDayCell, CalendarSize } from "./types";
-import { getCellIntensityClass } from "./utils";
+import { getCalendarCellStateClass, getCellIntensityClass } from "./utils";
 
 export interface CalendarCellProps {
   day: CalendarDayCell;
@@ -18,35 +18,53 @@ export const CalendarCell = memo((props: CalendarCellProps) => {
   const { day, maxCount, tooltipText, onClick, size = "default", disableTooltip = false } = props;
 
   const handleClick = () => {
-    if (day.count > 0 && onClick) {
+    if (onClick) {
       onClick(day.date);
     }
   };
 
   const sizeConfig = size === "small" ? SMALL_CELL_SIZE : DEFAULT_CELL_SIZE;
-  const smallExtraClasses = size === "small" ? `${SMALL_CELL_SIZE.dimensions} min-h-0` : "";
 
-  const baseClasses = cn(
-    "aspect-square w-full flex items-center justify-center text-center transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:ring-offset-2 select-none border border-border/10 bg-muted/20",
+  // Two elements with two jobs: the cell spans its whole column and takes the pointer, the
+  // chip inside it is the square that carries the fill and sets the row's height.
+  const cellClasses = "group/day flex w-full items-center justify-center select-none";
+  const chipClasses = cn(
+    "relative flex aspect-square w-full items-center justify-center text-center transition-[background-color,color,filter,box-shadow] duration-150 ease-out",
     sizeConfig.font,
     sizeConfig.borderRadius,
-    smallExtraClasses,
+    sizeConfig.maxSize,
   );
-  const isInteractive = Boolean(onClick && day.count > 0);
+  const isInteractive = Boolean(onClick);
   const ariaLabel = day.isSelected ? `${tooltipText} (selected)` : tooltipText;
 
   if (!day.isCurrentMonth) {
-    return <div className={cn(baseClasses, "text-muted-foreground/30 bg-transparent border-transparent cursor-default")}>{day.label}</div>;
+    return (
+      <div className={cn(cellClasses, "cursor-default")}>
+        <span className={cn(chipClasses, "bg-transparent text-muted-foreground/25")}>{day.label}</span>
+      </div>
+    );
   }
 
   const intensityClass = getCellIntensityClass(day, maxCount);
 
-  const buttonClasses = cn(
-    baseClasses,
-    intensityClass,
-    day.isToday && "ring-2 ring-primary/30 ring-offset-1 font-semibold z-10",
-    day.isSelected && "ring-2 ring-primary ring-offset-1 font-bold z-10",
-    isInteractive ? "cursor-pointer hover:bg-muted/40 hover:border-border/30" : "cursor-default",
+  const chip = (
+    <span
+      className={cn(
+        chipClasses,
+        intensityClass,
+        getCalendarCellStateClass(day),
+        isInteractive &&
+          "group-hover/day:brightness-[0.97] group-focus-visible/day:ring-2 group-focus-visible/day:ring-ring/40 group-focus-visible/day:ring-inset",
+      )}
+    >
+      {day.label}
+      {day.isToday && (
+        <span
+          aria-hidden="true"
+          className="absolute bottom-[3px] left-1/2 size-[3px] -translate-x-1/2 rounded-full bg-blue-600/80 dark:bg-blue-300/80"
+        />
+      )}
+    </span>
   );
 
   const button = (
@@ -57,13 +75,13 @@ export const CalendarCell = memo((props: CalendarCellProps) => {
       aria-label={ariaLabel}
       aria-current={day.isToday ? "date" : undefined}
       aria-disabled={!isInteractive}
-      className={buttonClasses}
+      className={cn(cellClasses, "p-0 focus-visible:outline-none", isInteractive ? "cursor-pointer" : "cursor-default")}
     >
-      {day.label}
+      {chip}
     </button>
   );
 
-  const shouldShowTooltip = tooltipText && day.count > 0 && !disableTooltip;
+  const shouldShowTooltip = day.count > 0 && tooltipText && !disableTooltip;
 
   if (!shouldShowTooltip) {
     return button;
@@ -71,7 +89,7 @@ export const CalendarCell = memo((props: CalendarCellProps) => {
 
   return (
     <Tooltip>
-      <TooltipTrigger asChild>{button}</TooltipTrigger>
+      <TooltipTrigger render={button} />
       <TooltipContent side="top">
         <p>{tooltipText}</p>
       </TooltipContent>

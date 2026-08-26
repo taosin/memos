@@ -30,13 +30,43 @@ func TestUserStore(t *testing.T) {
 	user, err = ts.UpdateUser(ctx, userPatch)
 	require.NoError(t, err)
 	require.Equal(t, userPatchNickname, user.Nickname)
-	err = ts.DeleteUser(ctx, &store.DeleteUser{
+	_, err = ts.DeleteUser(ctx, &store.DeleteUser{
 		ID: user.ID,
 	})
 	require.NoError(t, err)
 	users, err = ts.ListUsers(ctx, &store.FindUser{})
 	require.NoError(t, err)
 	require.Equal(t, 0, len(users))
+	ts.Close()
+}
+
+func TestUserListByIDList(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	ts := NewTestingStore(ctx, t)
+
+	// Create 5 users
+	var userIDs []int32
+	for i := 0; i < 5; i++ {
+		user, err := createTestingUserWithRole(ctx, ts, fmt.Sprintf("user_list_%d", i), store.RoleUser)
+		require.NoError(t, err)
+		userIDs = append(userIDs, user.ID)
+	}
+
+	// List users by IDList (3 out of 5)
+	targetIDs := userIDs[1:4]
+	users, err := ts.ListUsers(ctx, &store.FindUser{IDList: targetIDs})
+	require.NoError(t, err)
+	require.Equal(t, 3, len(users))
+
+	foundIDs := make(map[int32]bool)
+	for _, u := range users {
+		foundIDs[u.ID] = true
+	}
+	for _, id := range targetIDs {
+		require.True(t, foundIDs[id])
+	}
+
 	ts.Close()
 }
 
@@ -60,14 +90,6 @@ func TestUserGetByID(t *testing.T) {
 	notFound, err := ts.GetUser(ctx, &store.FindUser{ID: &nonExistentID})
 	require.NoError(t, err)
 	require.Nil(t, notFound)
-
-	// Get system bot
-	systemBotID := store.SystemBotID
-	systemBot, err := ts.GetUser(ctx, &store.FindUser{ID: &systemBotID})
-	require.NoError(t, err)
-	require.NotNil(t, systemBot)
-	require.Equal(t, store.SystemBotID, systemBot.ID)
-	require.Equal(t, "system_bot", systemBot.Username)
 
 	ts.Close()
 }
@@ -93,6 +115,33 @@ func TestUserGetByUsername(t *testing.T) {
 	require.Nil(t, notFound)
 
 	ts.Close()
+}
+
+func TestUsernameEqualityIsCaseSensitive(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	ts := NewTestingStore(ctx, t)
+	defer ts.Close()
+
+	upper, err := createTestingUserWithRole(ctx, ts, "Alice", store.RoleUser)
+	require.NoError(t, err)
+	lower, err := createTestingUserWithRole(ctx, ts, "alice", store.RoleUser)
+	require.NoError(t, err)
+	require.NotEqual(t, upper.ID, lower.ID)
+
+	for username, wantID := range map[string]int32{
+		"Alice": upper.ID,
+		"alice": lower.ID,
+	} {
+		found, err := ts.GetUser(ctx, &store.FindUser{Username: &username})
+		require.NoError(t, err)
+		require.Equal(t, wantID, found.ID)
+
+		listed, err := ts.ListUsers(ctx, &store.FindUser{UsernameList: []string{username}})
+		require.NoError(t, err)
+		require.Len(t, listed, 1)
+		require.Equal(t, wantID, listed[0].ID)
+	}
 }
 
 func TestUserListByRole(t *testing.T) {

@@ -1,99 +1,59 @@
 name: Bug Report
-description: Something isn't working as expected
+description: Report something that is not working as expected
 type: Bug
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting a bug! Please fill out the form below so we can reproduce and fix the issue.
+        Thanks for reporting a bug.
 
-        **Before submitting**, please search [existing issues](https://github.com/usememos/memos/issues) to avoid duplicates.
+        Before submitting, please search [existing issues](https://github.com/usememos/memos/issues) and, if possible, check the [latest release](https://github.com/usememos/memos/releases/latest). For questions and setup help, use [Discussions](https://github.com/usememos/memos/discussions).
 
   - type: checkboxes
     id: pre-check
     attributes:
-      label: Pre-submission Checklist
+      label: Check before submitting
       options:
-        - label: I have searched existing issues and confirmed this bug has not been reported
+        - label: I searched existing issues and did not find a duplicate
           required: true
-        - label: I can reproduce this bug on the latest version or the [demo site](https://demo.usememos.com)
-          required: true
-        - label: This is a bug, not a question (use [Discussions](https://github.com/usememos/memos/discussions) for questions)
-          required: true
-
-  - type: input
-    id: version
-    attributes:
-      label: Memos Version
-      description: Find this in **Settings > System > About** or via the `--version` flag
-      placeholder: "v0.25.2"
-    validations:
-      required: true
-
-  - type: dropdown
-    id: deployment
-    attributes:
-      label: Deployment Method
-      options:
-        - Docker
-        - Pre-built binary
-        - Built from source
-    validations:
-      required: true
-
-  - type: dropdown
-    id: database
-    attributes:
-      label: Database
-      options:
-        - SQLite
-        - PostgreSQL
-        - MySQL
-    validations:
-      required: true
-
-  - type: input
-    id: browser-os
-    attributes:
-      label: Browser & OS
-      description: e.g. Chrome 120 on macOS 15, Firefox 130 on Ubuntu 24.04
-      placeholder: "Chrome 120 on macOS 15"
-    validations:
-      required: false
 
   - type: textarea
-    id: bug-description
+    id: description
     attributes:
-      label: Bug Description
-      description: A clear and concise description of what the bug is
-      placeholder: When I try to..., the application...
+      label: Describe the bug
+      description: Tell us what happened and what you expected instead.
+      placeholder: |
+        What happened:
+        What I expected:
     validations:
       required: true
 
   - type: textarea
     id: reproduction-steps
     attributes:
-      label: Steps to Reproduce
-      description: Minimal steps to reliably reproduce the issue
+      label: Steps to reproduce
+      description: Give us the shortest steps that reproduce the problem.
       placeholder: |
-        1. Go to '...'
-        2. Click on '...'
-        3. See error
+        1. Go to ...
+        2. Click ...
+        3. See ...
     validations:
       required: true
 
-  - type: textarea
-    id: expected-behavior
+  - type: input
+    id: version
     attributes:
-      label: Expected Behavior
-      description: What did you expect to happen instead?
-      placeholder: I expected...
+      label: Memos version
+      description: Use the version from Settings > System, the image tag, or `memos --version`.
+      placeholder: "v0.29.x or main@abcdef"
     validations:
       required: true
 
   - type: textarea
     id: additional-context
     attributes:
-      label: Screenshots, Logs & Additional Context
-      description: Attach screenshots, browser console errors, or server logs if available
-      placeholder: Drag and drop images here, or paste error logs...
+      label: Additional context
+      description: Add relevant deployment details, logs, screenshots, or recordings. Remove secrets before submitting.
+      placeholder: |
+        Deployment / database / browser:
+        Logs or screenshots:

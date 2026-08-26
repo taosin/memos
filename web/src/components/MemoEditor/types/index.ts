@@ -1,19 +1,16 @@
 // MemoEditor type exports
 
 export type {
+  AudioRecorderPanelProps,
   EditorContentProps,
   EditorMetadataProps,
-  EditorProps,
   EditorToolbarProps,
+  EditorViewToggles,
   FocusModeExitButtonProps,
   FocusModeOverlayProps,
   InsertMenuProps,
-  LinkMemoDialogProps,
-  LocationDialogProps,
   MemoEditorProps,
-  SlashCommandsProps,
-  TagSuggestionsProps,
   VisibilitySelectorProps,
 } from "./components";
-export { MemoEditorContext, type MemoEditorContextValue } from "./context";
-export type { LocationState } from "./insert-menu";
+export type { EditorController } from "./editorController";
+export type { LocationState } from "./insertMenu";

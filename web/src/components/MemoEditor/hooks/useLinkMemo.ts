@@ -1,10 +1,10 @@
 import { create } from "@bufbuild/protobuf";
 import { useEffect, useMemo, useState } from "react";
-import useDebounce from "react-use/lib/useDebounce";
 import { memoServiceClient } from "@/connect";
-import { DEFAULT_LIST_MEMOS_PAGE_SIZE } from "@/helpers/consts";
-import { extractUserIdFromName } from "@/helpers/resource-names";
+import { useDebouncedEffect } from "@/hooks";
 import useCurrentUser from "@/hooks/useCurrentUser";
+import { DEFAULT_LIST_MEMOS_PAGE_SIZE } from "@/lib/constants";
+import { buildMemoCreatorFilter } from "@/lib/resource-names";
 import {
   type Memo,
   type MemoRelation,
@@ -38,13 +38,17 @@ export const useLinkMemo = ({ isOpen, currentMemoName, existingRelations, onAddR
     }
   }, [isOpen]);
 
-  useDebounce(
+  useDebouncedEffect(
     async () => {
       if (!isOpen) return;
 
       setIsFetching(true);
       try {
-        const conditions = [`creator_id == ${extractUserIdFromName(user?.name ?? "")}`];
+        const conditions: string[] = [];
+        const creatorFilter = buildMemoCreatorFilter(user?.name ?? "");
+        if (creatorFilter) {
+          conditions.push(creatorFilter);
+        }
         if (searchText) {
           conditions.push(`content.contains("${searchText}")`);
         }

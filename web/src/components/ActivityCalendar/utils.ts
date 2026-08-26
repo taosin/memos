@@ -1,9 +1,10 @@
 import dayjs from "dayjs";
 import isSameOrAfter from "dayjs/plugin/isSameOrAfter";
 import isSameOrBefore from "dayjs/plugin/isSameOrBefore";
+import type { MemoTimeBasis } from "@/contexts/ViewContext";
 import { useTranslate } from "@/utils/i18n";
 import { CELL_STYLES, INTENSITY_THRESHOLDS, MIN_COUNT, MONTHS_IN_YEAR } from "./constants";
-import type { CalendarDayCell } from "./types";
+import type { CalendarData, CalendarDayCell } from "./types";
 
 dayjs.extend(isSameOrAfter);
 dayjs.extend(isSameOrBefore);
@@ -22,11 +23,14 @@ export const getCellIntensityClass = (day: CalendarDayCell, maxCount: number): s
   return CELL_STYLES.MINIMAL;
 };
 
+export const getCalendarCellStateClass = (day: Pick<CalendarDayCell, "isSelected">): string =>
+  day.isSelected ? "z-10 ring-2 ring-blue-500/70 ring-inset" : "";
+
 export const generateMonthsForYear = (year: number): string[] => {
   return Array.from({ length: MONTHS_IN_YEAR }, (_, i) => dayjs(`${year}-01-01`).add(i, "month").format("YYYY-MM"));
 };
 
-export const calculateYearMaxCount = (data: Record<string, number>): number => {
+export const calculateMaxCount = (data: CalendarData): number => {
   let max = 0;
   for (const count of Object.values(data)) {
     max = Math.max(max, count);
@@ -55,16 +59,13 @@ export const filterDataByYear = (data: Record<string, number>, year: number): Re
   return filtered;
 };
 
-export const hasActivityData = (data: Record<string, number>): boolean => {
-  return Object.values(data).some((count) => count > 0);
-};
-
-export const getTooltipText = (count: number, date: string, t: TranslateFunction): string => {
+export const getTooltipText = (count: number, date: string, t: TranslateFunction, timeBasis: MemoTimeBasis = "create_time"): string => {
   if (count === 0) {
     return date;
   }
 
-  return t("memo.count-memos-in-date", {
+  const key = timeBasis === "update_time" ? "memo.count-memos-updated-in-date" : "memo.count-memos-in-date";
+  return t(key, {
     count,
     memos: count === 1 ? t("common.memo") : t("common.memos"),
     date,

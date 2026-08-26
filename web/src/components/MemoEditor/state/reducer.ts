@@ -1,5 +1,5 @@
 import type { EditorAction, EditorState } from "./types";
-import { initialState } from "./types";
+import { createInitialState } from "./types";
 
 export function editorReducer(state: EditorState, action: EditorAction): EditorState {
   switch (action.type) {
@@ -7,15 +7,21 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       return {
         ...state,
         content: action.payload.content,
+        contentSource: "external",
         metadata: action.payload.metadata,
         timestamps: action.payload.timestamps,
       };
 
-    case "UPDATE_CONTENT":
+    case "UPDATE_CONTENT": {
+      if (state.content === action.payload.content && state.contentSource === action.payload.source) {
+        return state;
+      }
       return {
         ...state,
-        content: action.payload,
+        content: action.payload.content,
+        contentSource: action.payload.source,
       };
+    }
 
     case "SET_METADATA":
       return {
@@ -23,42 +29,6 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         metadata: {
           ...state.metadata,
           ...action.payload,
-        },
-      };
-
-    case "ADD_ATTACHMENT":
-      return {
-        ...state,
-        metadata: {
-          ...state.metadata,
-          attachments: [...state.metadata.attachments, action.payload],
-        },
-      };
-
-    case "REMOVE_ATTACHMENT":
-      return {
-        ...state,
-        metadata: {
-          ...state.metadata,
-          attachments: state.metadata.attachments.filter((a) => a.name !== action.payload),
-        },
-      };
-
-    case "ADD_RELATION":
-      return {
-        ...state,
-        metadata: {
-          ...state.metadata,
-          relations: [...state.metadata.relations, action.payload],
-        },
-      };
-
-    case "REMOVE_RELATION":
-      return {
-        ...state,
-        metadata: {
-          ...state.metadata,
-          relations: state.metadata.relations.filter((r) => r.relatedMemo?.name !== action.payload),
         },
       };
 
@@ -74,10 +44,10 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         localFiles: state.localFiles.filter((f) => f.previewUrl !== action.payload),
       };
 
-    case "CLEAR_LOCAL_FILES":
+    case "SET_LOCAL_FILES":
       return {
         ...state,
-        localFiles: [],
+        localFiles: action.payload,
       };
 
     case "TOGGLE_FOCUS_MODE":
@@ -101,21 +71,12 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         },
       };
 
-    case "SET_DRAGGING":
+    case "SET_PENDING_INLINE_IMAGE_INSERTIONS":
       return {
         ...state,
         ui: {
           ...state.ui,
-          isDragging: action.payload,
-        },
-      };
-
-    case "SET_COMPOSING":
-      return {
-        ...state,
-        ui: {
-          ...state.ui,
-          isComposing: action.payload,
+          pendingInlineImageInsertions: action.payload,
         },
       };
 
@@ -128,10 +89,14 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         },
       };
 
-    case "RESET":
+    case "SET_RECORDER_BUSY":
       return {
-        ...initialState,
+        ...state,
+        recorderBusy: action.payload,
       };
+
+    case "RESET":
+      return createInitialState();
 
     default:
       return state;

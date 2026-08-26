@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 
@@ -11,23 +12,23 @@ import (
 )
 
 func (d *DB) CreateUser(ctx context.Context, create *store.User) (*store.User, error) {
-	fields := []string{"username", "role", "email", "nickname", "password_hash", "avatar_url"}
-	args := []any{create.Username, create.Role, create.Email, create.Nickname, create.PasswordHash, create.AvatarURL}
-	stmt := "INSERT INTO \"user\" (" + strings.Join(fields, ", ") + ") VALUES (" + placeholders(len(args)) + ") RETURNING id, description, created_ts, updated_ts, row_status"
-	if err := d.db.QueryRowContext(ctx, stmt, args...).Scan(
-		&create.ID,
-		&create.Description,
-		&create.CreatedTs,
-		&create.UpdatedTs,
-		&create.RowStatus,
-	); err != nil {
+	if err := insertUser(ctx, d.db, create); err != nil {
 		return nil, err
 	}
-
 	return create, nil
 }
 
 func (d *DB) UpdateUser(ctx context.Context, update *store.UpdateUser) (*store.User, error) {
+	tx, err := d.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if update.RowStatus != nil && *update.RowStatus == store.Archived {
+		if err := validatePostgresUserArchive(ctx, tx, update.ID); err != nil {
+			return nil, err
+		}
+	}
 	set, args := []string{}, []any{}
 	if v := update.UpdatedTs; v != nil {
 		set, args = append(set, "updated_ts = "+placeholder(len(args)+1)), append(args, *v)
@@ -65,7 +66,7 @@ func (d *DB) UpdateUser(ctx context.Context, update *store.UpdateUser) (*store.U
 	`
 	args = append(args, update.ID)
 	user := &store.User{}
-	if err := d.db.QueryRowContext(ctx, query, args...).Scan(
+	if err := tx.QueryRowContext(ctx, query, args...).Scan(
 		&user.ID,
 		&user.Username,
 		&user.Role,
@@ -80,12 +81,44 @@ func (d *DB) UpdateUser(ctx context.Context, update *store.UpdateUser) (*store.U
 	); err != nil {
 		return nil, err
 	}
-
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
 	return user, nil
+}
+
+func validatePostgresUserArchive(ctx context.Context, tx *sql.Tx, userID int32) error {
+	var isLastActiveAdmin bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (
+		SELECT 1
+		FROM "user" target_user
+		JOIN space_member target ON target.user_id = target_user.id
+			AND target.status = 'ACTIVE' AND target.role = 'ADMIN'
+		JOIN space ON space.id = target.space_id
+		WHERE target_user.id = $1
+			AND target_user.row_status = 'NORMAL'
+			AND NOT EXISTS (
+				SELECT 1
+				FROM space_member other
+				JOIN "user" other_user ON other_user.id = other.user_id
+				WHERE other.space_id = target.space_id
+					AND other.user_id <> target.user_id
+					AND other.status = 'ACTIVE'
+					AND other.role = 'ADMIN'
+					AND other_user.row_status = 'NORMAL'
+			)
+	)`, userID).Scan(&isLastActiveAdmin); err != nil {
+		return err
+	}
+	if isLastActiveAdmin {
+		return store.ErrLastSpaceAdmin
+	}
+	return nil
 }
 
 func (d *DB) ListUsers(ctx context.Context, find *store.FindUser) ([]*store.User, error) {
 	where, args := []string{"1 = 1"}, []any{}
+	orderBy := []string{"created_ts DESC", "row_status DESC", "id DESC"}
 
 	if len(find.Filters) > 0 {
 		return nil, errors.Errorf("user filters are not supported")
@@ -93,6 +126,25 @@ func (d *DB) ListUsers(ctx context.Context, find *store.FindUser) ([]*store.User
 
 	if v := find.ID; v != nil {
 		where, args = append(where, "id = "+placeholder(len(args)+1)), append(args, *v)
+	}
+	if len(find.IDList) > 0 {
+		holders := make([]string, 0, len(find.IDList))
+		for range find.IDList {
+			holders = append(holders, placeholder(len(args)+1))
+			args = append(args, find.IDList[len(holders)-1])
+		}
+		where = append(where, fmt.Sprintf("id IN (%s)", strings.Join(holders, ", ")))
+	}
+	if len(find.UsernameList) > 0 {
+		holders := make([]string, 0, len(find.UsernameList))
+		for _, username := range find.UsernameList {
+			holders = append(holders, placeholder(len(args)+1))
+			args = append(args, username)
+		}
+		where = append(where, fmt.Sprintf("username IN (%s)", strings.Join(holders, ", ")))
+	}
+	if v := find.RowStatus; v != nil {
+		where, args = append(where, "row_status = "+placeholder(len(args)+1)), append(args, *v)
 	}
 	if v := find.Username; v != nil {
 		where, args = append(where, "username = "+placeholder(len(args)+1)), append(args, *v)
@@ -106,8 +158,19 @@ func (d *DB) ListUsers(ctx context.Context, find *store.FindUser) ([]*store.User
 	if v := find.Nickname; v != nil {
 		where, args = append(where, "nickname = "+placeholder(len(args)+1)), append(args, *v)
 	}
-
-	orderBy := []string{"created_ts DESC", "row_status DESC"}
+	if v := find.Search; v != nil && strings.TrimSpace(*v) != "" {
+		query := strings.ToLower(strings.TrimSpace(*v))
+		where, args = append(where, "(LOWER(username) LIKE "+placeholder(len(args)+1)+" OR LOWER(nickname) LIKE "+placeholder(len(args)+2)+")"), append(args, "%"+query+"%", "%"+query+"%")
+		orderBy = []string{
+			"CASE WHEN LOWER(username) = " + placeholder(len(args)+1) + " THEN 0 " +
+				"WHEN LOWER(username) LIKE " + placeholder(len(args)+2) + " THEN 1 " +
+				"WHEN LOWER(nickname) LIKE " + placeholder(len(args)+3) + " THEN 2 ELSE 3 END",
+			"LENGTH(username) ASC",
+			"created_ts DESC",
+			"row_status DESC",
+		}
+		args = append(args, query, query+"%", query+"%")
+	}
 	query := `
 		SELECT 
 			id,
@@ -125,6 +188,9 @@ func (d *DB) ListUsers(ctx context.Context, find *store.FindUser) ([]*store.User
 		WHERE ` + strings.Join(where, " AND ") + ` ORDER BY ` + strings.Join(orderBy, ", ")
 	if v := find.Limit; v != nil {
 		query += fmt.Sprintf(" LIMIT %d", *v)
+		if v := find.Offset; v != nil {
+			query += fmt.Sprintf(" OFFSET %d", *v)
+		}
 	}
 	rows, err := d.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -158,15 +224,4 @@ func (d *DB) ListUsers(ctx context.Context, find *store.FindUser) ([]*store.User
 	}
 
 	return list, nil
-}
-
-func (d *DB) DeleteUser(ctx context.Context, delete *store.DeleteUser) error {
-	result, err := d.db.ExecContext(ctx, `DELETE FROM "user" WHERE id = $1`, delete.ID)
-	if err != nil {
-		return err
-	}
-	if _, err := result.RowsAffected(); err != nil {
-		return err
-	}
-	return nil
 }

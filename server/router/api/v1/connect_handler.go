@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"connectrpc.com/connect"
+	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -38,9 +39,10 @@ func (s *ConnectServiceHandler) RegisterConnectHandlers(mux *http.ServeMux, opts
 		wrap(apiv1connect.NewAuthServiceHandler(s, opts...)),
 		wrap(apiv1connect.NewUserServiceHandler(s, opts...)),
 		wrap(apiv1connect.NewMemoServiceHandler(s, opts...)),
+		wrap(apiv1connect.NewSpaceServiceHandler(s, opts...)),
 		wrap(apiv1connect.NewAttachmentServiceHandler(s, opts...)),
-		wrap(apiv1connect.NewShortcutServiceHandler(s, opts...)),
-		wrap(apiv1connect.NewActivityServiceHandler(s, opts...)),
+		wrap(apiv1connect.NewAIServiceHandler(s, opts...)),
+		wrap(apiv1connect.NewMemoViewServiceHandler(s, opts...)),
 		wrap(apiv1connect.NewIdentityProviderServiceHandler(s, opts...)),
 	}
 
@@ -67,7 +69,7 @@ func convertGRPCError(err error) error {
 		return nil
 	}
 	if st, ok := status.FromError(err); ok {
-		return connect.NewError(grpcCodeToConnectCode(st.Code()), err)
+		return connect.NewError(grpcCodeToConnectCode(st.Code()), errors.New(st.Message()))
 	}
 	return connect.NewError(connect.CodeInternal, err)
 }

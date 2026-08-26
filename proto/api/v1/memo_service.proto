@@ -15,7 +15,10 @@ import "google/protobuf/timestamp.proto";
 option go_package = "gen/api/v1";
 
 service MemoService {
-  // CreateMemo creates a memo.
+  // CreateMemo creates a memo. The request body is a Memo; set its content
+  // (Markdown) and visibility (PRIVATE | PROTECTED | PUBLIC | SPACE,
+  // default PRIVATE).
+  // The memo is owned by the authenticated user; requires authentication.
   rpc CreateMemo(CreateMemoRequest) returns (Memo) {
     option (google.api.http) = {
       post: "/api/v1/memos"
@@ -23,7 +26,7 @@ service MemoService {
     };
     option (google.api.method_signature) = "memo";
   }
-  // ListMemos lists memos with pagination and filter.
+  // ListMemos lists readable non-comment memos with pagination and filter.
   rpc ListMemos(ListMemosRequest) returns (ListMemosResponse) {
     option (google.api.http) = {get: "/api/v1/memos"};
     option (google.api.method_signature) = "";
@@ -41,12 +44,15 @@ service MemoService {
     };
     option (google.api.method_signature) = "memo,update_mask";
   }
-  // DeleteMemo deletes a memo.
+  // DeleteMemo deletes only the named memo and its owned resources. It removes
+  // incident relations but never deletes another memo.
   rpc DeleteMemo(DeleteMemoRequest) returns (google.protobuf.Empty) {
     option (google.api.http) = {delete: "/api/v1/{name=memos/*}"};
     option (google.api.method_signature) = "name";
   }
-  // SetMemoAttachments sets attachments for a memo.
+  // SetMemoAttachments replaces the full set of attachments on a memo with the
+  // provided list (not an append). Pass the complete desired set; an empty list
+  // clears all attachments. Idempotent.
   rpc SetMemoAttachments(SetMemoAttachmentsRequest) returns (google.protobuf.Empty) {
     option (google.api.http) = {
       patch: "/api/v1/{name=memos/*}/attachments"
@@ -59,7 +65,9 @@ service MemoService {
     option (google.api.http) = {get: "/api/v1/{name=memos/*}/attachments"};
     option (google.api.method_signature) = "name";
   }
-  // SetMemoRelations sets relations for a memo.
+  // SetMemoRelations replaces the full set of mutable REFERENCE relations on a
+  // memo. COMMENT relations are immutable creation context and are rejected by
+  // this RPC. An empty list clears references without changing COMMENT.
   rpc SetMemoRelations(SetMemoRelationsRequest) returns (google.protobuf.Empty) {
     option (google.api.http) = {
       patch: "/api/v1/{name=memos/*}/relations"
@@ -72,7 +80,9 @@ service MemoService {
     option (google.api.http) = {get: "/api/v1/{name=memos/*}/relations"};
     option (google.api.method_signature) = "name";
   }
-  // CreateMemoComment creates a comment for a memo.
+  // CreateMemoComment atomically creates an independent memo plus one immutable
+  // COMMENT context relation to the named memo. The new memo keeps its own
+  // placement, visibility, authorship, and lifecycle.
   rpc CreateMemoComment(CreateMemoCommentRequest) returns (Memo) {
     option (google.api.http) = {
       post: "/api/v1/{name=memos/*}/comments"
@@ -90,7 +100,7 @@ service MemoService {
     option (google.api.http) = {get: "/api/v1/{name=memos/*}/reactions"};
     option (google.api.method_signature) = "name";
   }
-  // UpsertMemoReaction upserts a reaction for a memo.
+  // UpsertMemoReaction adds or updates the authenticated user's reaction on a memo.
   rpc UpsertMemoReaction(UpsertMemoReactionRequest) returns (Reaction) {
     option (google.api.http) = {
       post: "/api/v1/{name=memos/*}/reactions"
@@ -103,15 +113,57 @@ service MemoService {
     option (google.api.http) = {delete: "/api/v1/{name=memos/*/reactions/*}"};
     option (google.api.method_signature) = "name";
   }
+  // CreateMemoShare creates a share link for a memo. Requires authentication as the memo creator.
+  rpc CreateMemoShare(CreateMemoShareRequest) returns (MemoShare) {
+    option (google.api.http) = {
+      post: "/api/v1/{parent=memos/*}/shares"
+      body: "memo_share"
+    };
+    option (google.api.method_signature) = "parent,memo_share";
+  }
+  // ListMemoShares lists all share links for a memo. Requires authentication as the memo creator.
+  rpc ListMemoShares(ListMemoSharesRequest) returns (ListMemoSharesResponse) {
+    option (google.api.http) = {get: "/api/v1/{parent=memos/*}/shares"};
+    option (google.api.method_signature) = "parent";
+  }
+  // DeleteMemoShare revokes a share link. Requires authentication as the memo creator.
+  rpc DeleteMemoShare(DeleteMemoShareRequest) returns (google.protobuf.Empty) {
+    option (google.api.http) = {delete: "/api/v1/{name=memos/*/shares/*}"};
+    option (google.api.method_signature) = "name";
+  }
+  // GetSharedMemo resolves a share token to its memo. No authentication required.
+  // Returns NOT_FOUND if the token is invalid or expired.
+  rpc GetSharedMemo(GetSharedMemoRequest) returns (Memo) {
+    option (google.api.http) = {get: "/api/v1/shares/{share_token}/memo"};
+  }
+  // GetLinkMetadata gets metadata for a link.
+  rpc GetLinkMetadata(GetLinkMetadataRequest) returns (LinkMetadata) {
+    option (google.api.http) = {get: "/api/v1/memos/-/linkMetadata"};
+  }
+  // BatchGetLinkMetadata gets metadata for links.
+  rpc BatchGetLinkMetadata(BatchGetLinkMetadataRequest) returns (BatchGetLinkMetadataResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/memos/-/linkMetadata:batchGet"
+      body: "*"
+    };
+  }
 }
 
+// Visibility controls who can read a memo.
 enum Visibility {
   VISIBILITY_UNSPECIFIED = 0;
+  // PRIVATE: only the creator can read the memo.
   PRIVATE = 1;
+  // PROTECTED: signed-in users of the instance can read the memo.
   PROTECTED = 2;
+  // PUBLIC: signed-in users can read the memo; anonymous visitors can read it
+  // when instance policy permits.
   PUBLIC = 3;
+  // SPACE: active members of the memo's space can read it.
+  SPACE = 4;
 }
 
+// Reaction is a reaction attached to a memo.
 message Reaction {
   option (google.api.resource) = {
     type: "memos.api.v1/Reaction"
@@ -135,13 +187,8 @@ message Reaction {
     (google.api.resource_reference) = {type: "memos.api.v1/User"}
   ];
 
-  // The resource name of the content.
-  // For memo reactions, this should be the memo's resource name.
-  // Format: memos/{memo}
-  string content_id = 3 [
-    (google.api.field_behavior) = REQUIRED,
-    (google.api.resource_reference) = {type: "memos.api.v1/Memo"}
-  ];
+  reserved 3;
+  reserved "content_id";
 
   // Required. The type of reaction (e.g., "👍", "❤️", "😄").
   string reaction_type = 4 [(google.api.field_behavior) = REQUIRED];
@@ -160,7 +207,7 @@ message Memo {
   };
 
   // The resource name of the memo.
-  // Format: memos/{memo}, memo is the user defined id or uuid.
+  // Format: memos/{memo}, where memo is the user-defined UID.
   string name = 1 [(google.api.field_behavior) = IDENTIFIER];
 
   // The state of the memo.
@@ -181,13 +228,16 @@ message Memo {
   // If not set on creation, the server will set it to the current time.
   google.protobuf.Timestamp update_time = 5 [(google.api.field_behavior) = OPTIONAL];
 
-  // The display timestamp of the memo.
-  google.protobuf.Timestamp display_time = 6 [(google.api.field_behavior) = OPTIONAL];
+  reserved 6;
+  reserved "display_time";
 
   // Required. The content of the memo in Markdown format.
   string content = 7 [(google.api.field_behavior) = REQUIRED];
 
   // The visibility of the memo.
+  // One of PRIVATE (creator only), PROTECTED (signed-in users), PUBLIC
+  // (anonymous-eligible), or SPACE (active space members). Defaults to
+  // PRIVATE on creation when unspecified.
   Visibility visibility = 9 [(google.api.field_behavior) = REQUIRED];
 
   // Output only. The tags extracted from the content.
@@ -208,7 +258,8 @@ message Memo {
   // Output only. The computed properties of the memo.
   Property property = 15 [(google.api.field_behavior) = OUTPUT_ONLY];
 
-  // Output only. The name of the parent memo.
+  // Output only. The readable context memo of this COMMENT relation, if any.
+  // This is omitted unless the caller may independently read both memos.
   // Format: memos/{memo}
   optional string parent = 16 [
     (google.api.field_behavior) = OUTPUT_ONLY,
@@ -220,6 +271,13 @@ message Memo {
 
   // Optional. The location of the memo.
   optional Location location = 18 [(google.api.field_behavior) = OPTIONAL];
+
+  // Optional. The space in which this memo is placed. Format: spaces/{space}.
+  // Every memo, including a comment, owns its placement independently.
+  optional string space = 19 [
+    (google.api.field_behavior) = OPTIONAL,
+    (google.api.resource_reference) = {type: "memos.api.v1/Space"}
+  ];
 
   // Computed properties of a memo.
   message Property {
@@ -249,6 +307,7 @@ message CreateMemoRequest {
 
   // Optional. The memo ID to use for this memo.
   // If empty, a unique ID will be generated.
+  // Format: ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,34}[a-zA-Z0-9])?$
   string memo_id = 2 [(google.api.field_behavior) = OPTIONAL];
 }
 
@@ -268,19 +327,37 @@ message ListMemosRequest {
   State state = 3 [(google.api.field_behavior) = OPTIONAL];
 
   // Optional. The order to sort results by.
-  // Default to "display_time desc".
+  // Default to "create_time desc".
   // Supports comma-separated list of fields following AIP-132.
-  // Example: "pinned desc, display_time desc" or "create_time asc"
-  // Supported fields: pinned, display_time, create_time, update_time, name
+  // Example: "pinned desc, create_time desc" or "update_time asc"
+  // Supported fields: pinned, create_time, update_time, name.
+  // Note: order_by uses create_time / update_time, while the filter
+  // expression uses created_ts / updated_ts for the same timestamps.
   string order_by = 4 [(google.api.field_behavior) = OPTIONAL];
 
-  // Optional. Filter to apply to the list results.
-  // Filter is a CEL expression to filter memos.
-  // Refer to `Shortcut.filter`.
+  // Optional. A CEL expression to filter memos. Combine terms with && and ||.
+  // Available fields:
+  //   content (string), creator (string, e.g. "users/1"),
+  //   created_ts / updated_ts (timestamp), pinned (bool),
+  //   visibility (string: PRIVATE | PROTECTED | PUBLIC | SPACE),
+  //   space (string resource name or null when the memo has no space),
+  //   tags (list<string>; match with `"work" in tags`, not `tag == "work"`),
+  //   has_task_list / has_link / has_code / has_incomplete_tasks (bool),
+  //   has_location (bool; true when the memo has a location attached).
+  // Note: the time fields here are created_ts / updated_ts, which differ from
+  // the create_time / update_time names used by order_by.
+  // Examples:
+  //   pinned == true && visibility == "PUBLIC"
+  //   space == "spaces/team" or space == null
+  //   tags.exists(t, t == "urgent")
+  //   content.contains("roadmap") && created_ts > now - duration("168h")
   string filter = 5 [(google.api.field_behavior) = OPTIONAL];
 
   // Optional. If true, show deleted memos in the response.
   bool show_deleted = 6 [(google.api.field_behavior) = OPTIONAL];
+
+  reserved 7, 8;
+  reserved "space", "unassigned";
 }
 
 message ListMemosResponse {
@@ -394,7 +471,7 @@ message SetMemoRelationsRequest {
     (google.api.resource_reference) = {type: "memos.api.v1/Memo"}
   ];
 
-  // Required. The relations to set for the memo.
+  // Required. The REFERENCE relations to set for the memo. COMMENT is invalid.
   repeated MemoRelation relations = 2 [(google.api.field_behavior) = REQUIRED];
 }
 
@@ -460,9 +537,6 @@ message ListMemoCommentsResponse {
 
   // A token for the next page of results.
   string next_page_token = 2;
-
-  // The total count of comments.
-  int32 total_size = 3;
 }
 
 message ListMemoReactionsRequest {
@@ -486,9 +560,6 @@ message ListMemoReactionsResponse {
 
   // A token for the next page of results.
   string next_page_token = 2;
-
-  // The total count of reactions.
-  int32 total_size = 3;
 }
 
 message UpsertMemoReactionRequest {
@@ -510,4 +581,94 @@ message DeleteMemoReactionRequest {
     (google.api.field_behavior) = REQUIRED,
     (google.api.resource_reference) = {type: "memos.api.v1/Reaction"}
   ];
+}
+
+// MemoShare is an access grant that permits read-only access to a memo via an opaque bearer token.
+message MemoShare {
+  option (google.api.resource) = {
+    type: "memos.api.v1/MemoShare"
+    pattern: "memos/{memo}/shares/{share}"
+    singular: "share"
+    plural: "shares"
+  };
+
+  // The resource name of the share. Format: memos/{memo}/shares/{share}
+  // The {share} segment is the opaque token used in the share URL.
+  string name = 1 [(google.api.field_behavior) = IDENTIFIER];
+
+  // Output only. When this share link was created.
+  google.protobuf.Timestamp create_time = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // Optional. When set, the share link stops working after this time.
+  // If unset, the link never expires.
+  optional google.protobuf.Timestamp expire_time = 3 [(google.api.field_behavior) = OPTIONAL];
+}
+
+message CreateMemoShareRequest {
+  // Required. The resource name of the memo to share.
+  // Format: memos/{memo}
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "memos.api.v1/Memo"}
+  ];
+
+  // Required. The share to create.
+  MemoShare memo_share = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+message ListMemoSharesRequest {
+  // Required. The resource name of the memo.
+  // Format: memos/{memo}
+  string parent = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "memos.api.v1/Memo"}
+  ];
+}
+
+message ListMemoSharesResponse {
+  // The list of share links.
+  repeated MemoShare memo_shares = 1;
+}
+
+message DeleteMemoShareRequest {
+  // Required. The resource name of the share to delete.
+  // Format: memos/{memo}/shares/{share}
+  string name = 1 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.resource_reference) = {type: "memos.api.v1/MemoShare"}
+  ];
+}
+
+message GetSharedMemoRequest {
+  // Required. The opaque bearer token extracted from the share URL.
+  string share_token = 1 [(google.api.field_behavior) = REQUIRED];
+}
+
+message GetLinkMetadataRequest {
+  // Required. The link URL.
+  string url = 1 [(google.api.field_behavior) = REQUIRED];
+}
+
+message BatchGetLinkMetadataRequest {
+  // Required. The link URLs.
+  repeated string urls = 1 [(google.api.field_behavior) = REQUIRED];
+}
+
+message BatchGetLinkMetadataResponse {
+  // The link metadata list, in the same order as the input URLs.
+  repeated LinkMetadata link_metadata = 1;
+}
+
+message LinkMetadata {
+  // The original link URL.
+  string url = 1;
+
+  // The link title.
+  string title = 2;
+
+  // The link description.
+  string description = 3;
+
+  // The link image URL.
+  string image = 4;
 }

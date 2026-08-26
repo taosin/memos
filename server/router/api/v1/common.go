@@ -12,7 +12,7 @@ import (
 
 const (
 	// DefaultPageSize is the default page size for requests.
-	DefaultPageSize = 10
+	DefaultPageSize = 50
 	// MaxPageSize is the maximum page size for requests.
 	MaxPageSize = 1000
 )
@@ -44,6 +44,17 @@ func getPageToken(limit int, offset int) (string, error) {
 	})
 }
 
+func normalizePageSize(pageSize int32) int {
+	limit := int(pageSize)
+	if limit <= 0 {
+		return DefaultPageSize
+	}
+	if limit > MaxPageSize {
+		return MaxPageSize
+	}
+	return limit
+}
+
 func marshalPageToken(pageToken *v1pb.PageToken) (string, error) {
 	b, err := proto.Marshal(pageToken)
 	if err != nil {
@@ -63,6 +74,6 @@ func unmarshalPageToken(s string, pageToken *v1pb.PageToken) error {
 	return nil
 }
 
-func isSuperUser(user *store.User) bool {
-	return user.Role == store.RoleAdmin
+func canModifyMemo(user *store.User, memo *store.Memo) bool {
+	return user != nil && memo != nil && memo.CreatorID == user.ID
 }

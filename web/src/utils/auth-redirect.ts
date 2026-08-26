@@ -1,19 +1,38 @@
 import { clearAccessToken } from "@/auth-state";
 import { ROUTES } from "@/router/routes";
+import { buildAuthRoute, isPublicRoute } from "./redirect-safety";
 
-const PUBLIC_ROUTES = [
-  ROUTES.AUTH, // Authentication pages
-  ROUTES.EXPLORE, // Explore page
-  "/u/", // User profile pages (dynamic)
-  "/memos/", // Individual memo detail pages (dynamic)
-] as const;
+// Re-export the pure helpers so existing call sites (`@/utils/auth-redirect`)
+// keep working without every caller switching to the new module. The side-effectful
+// `redirectOnAuthFailure` lives here; pure logic lives in `./redirect-safety`.
+export {
+  AUTH_REASON_PARAM,
+  AUTH_REASON_PROTECTED_MEMO,
+  AUTH_REDIRECT_PARAM,
+  appendSearchParams,
+  buildAuthRoute,
+  getSafeRedirectPath,
+  isPublicRoute,
+  shouldGatePrivateInstance,
+} from "./redirect-safety";
 
-function isPublicRoute(path: string): boolean {
-  return PUBLIC_ROUTES.some((route) => path.startsWith(route));
-}
-
-export function redirectOnAuthFailure(forceRedirect = false): void {
+/**
+ * Imperatively redirects the current document to the auth entry page, preserving
+ * the current URL as the `redirect` target. Intended for hard-fail auth paths
+ * (e.g. a refresh-token request returning 401 from a non-React context).
+ *
+ * No-ops when the user is already on an auth page or on a public page that
+ * does not require authentication, unless `forceRedirect` is set.
+ */
+export function redirectOnAuthFailure(
+  forceRedirect = false,
+  options?: {
+    redirect?: string | null;
+    reason?: string | null;
+  },
+): void {
   const currentPath = window.location.pathname;
+  const currentRedirectPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
 
   // Already on auth page, nothing to do.
   if (currentPath.startsWith(ROUTES.AUTH)) {
@@ -26,5 +45,10 @@ export function redirectOnAuthFailure(forceRedirect = false): void {
   }
 
   clearAccessToken();
-  window.location.replace(ROUTES.AUTH);
+  window.location.replace(
+    buildAuthRoute({
+      ...options,
+      redirect: options?.redirect ?? currentRedirectPath,
+    }),
+  );
 }

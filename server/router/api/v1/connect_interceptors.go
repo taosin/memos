@@ -2,7 +2,6 @@ package v1
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"reflect"
@@ -13,7 +12,6 @@ import (
 	"google.golang.org/grpc/metadata"
 
 	"github.com/usememos/memos/server/auth"
-	"github.com/usememos/memos/store"
 )
 
 // MetadataInterceptor converts Connect HTTP headers to gRPC metadata.
@@ -38,11 +36,20 @@ func (*MetadataInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc 
 		if ua := header.Get("User-Agent"); ua != "" {
 			md.Set("user-agent", ua)
 		}
+		if origin := header.Get("Origin"); origin != "" {
+			md.Set("origin", origin)
+		}
 		if xff := header.Get("X-Forwarded-For"); xff != "" {
 			md.Set("x-forwarded-for", xff)
 		}
+		if xfp := header.Get("X-Forwarded-Proto"); xfp != "" {
+			md.Set("x-forwarded-proto", xfp)
+		}
 		if xri := header.Get("X-Real-Ip"); xri != "" {
 			md.Set("x-real-ip", xri)
+		}
+		if forwarded := header.Get("Forwarded"); forwarded != "" {
+			md.Set("forwarded", forwarded)
 		}
 		// Forward Cookie header for authentication methods that need it (e.g., RefreshToken)
 		if cookie := header.Get("Cookie"); cookie != "" {
@@ -58,9 +65,7 @@ func (*MetadataInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc 
 		// Prevent browser caching of API responses to avoid stale data issues
 		// See: https://github.com/usememos/memos/issues/5470
 		if !isNilAnyResponse(resp) && resp.Header() != nil {
-			resp.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-			resp.Header().Set("Pragma", "no-cache")
-			resp.Header().Set("Expires", "0")
+			setAPIResponseNoStoreHeaders(resp.Header())
 		}
 
 		return resp, err
@@ -72,7 +77,7 @@ func isNilAnyResponse(resp connect.AnyResponse) bool {
 		return true
 	}
 	val := reflect.ValueOf(resp)
-	return val.Kind() == reflect.Ptr && val.IsNil()
+	return val.Kind() == reflect.Pointer && val.IsNil()
 }
 
 func (*MetadataInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
@@ -195,19 +200,16 @@ func (in *RecoveryInterceptor) logPanic(procedure string, panicValue any) {
 	slog.LogAttrs(context.Background(), slog.LevelError, "panic recovered in Connect handler", attrs...)
 }
 
-// AuthInterceptor handles authentication for Connect handlers.
-//
-// It enforces authentication for all endpoints except those listed in PublicMethods.
-// Role-based authorization (admin checks) remains in the service layer.
+// AuthInterceptor enforces authentication and anonymous-access policy for Connect
+// handlers by delegating to the shared Authorizer. Role-based authorization
+// (admin checks) remains in the service layer.
 type AuthInterceptor struct {
-	authenticator *auth.Authenticator
+	authorizer *Authorizer
 }
 
-// NewAuthInterceptor creates a new auth interceptor.
-func NewAuthInterceptor(store *store.Store, secret string) *AuthInterceptor {
-	return &AuthInterceptor{
-		authenticator: auth.NewAuthenticator(store, secret),
-	}
+// NewAuthInterceptor creates a new auth interceptor backed by the shared Authorizer.
+func NewAuthInterceptor(authorizer *Authorizer) *AuthInterceptor {
+	return &AuthInterceptor{authorizer: authorizer}
 }
 
 func (in *AuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
@@ -215,17 +217,23 @@ func (in *AuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 		header := req.Header()
 		authHeader := header.Get("Authorization")
 
-		result := in.authenticator.Authenticate(ctx, authHeader)
-
-		// Enforce authentication for non-public methods
-		if result == nil && !IsPublicMethod(req.Spec().Procedure) {
-			return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("authentication required"))
+		result := in.authorizer.Authenticate(ctx, authHeader)
+		if err := in.authorizer.CheckAccess(ctx, req.Spec().Procedure, result); err != nil {
+			return nil, newAuthorizationConnectError(err)
 		}
 
 		ctx = auth.ApplyToContext(ctx, result)
 
 		return next(ctx, req)
 	}
+}
+
+func newAuthorizationConnectError(err error) *connect.Error {
+	if pkgerrors.Is(err, ErrUnauthenticated) {
+		return connect.NewError(connect.CodeUnauthenticated, ErrUnauthenticated)
+	}
+	slog.Error("failed to resolve API access policy", "error", err)
+	return connect.NewError(connect.CodeInternal, pkgerrors.New("failed to resolve API access policy"))
 }
 
 func (*AuthInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {

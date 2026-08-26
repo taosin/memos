@@ -9,8 +9,8 @@ import { useCalendarMatrix } from "./useCalendar";
 import { getTooltipText } from "./utils";
 
 const GRID_STYLES: Record<CalendarSize, { gap: string; headerText: string }> = {
-  small: { gap: "gap-1.5", headerText: "text-[10px]" },
-  default: { gap: "gap-2", headerText: "text-xs" },
+  small: { gap: "gap-1", headerText: "text-[9px]" },
+  default: { gap: "gap-1", headerText: "text-2xs" },
 };
 
 interface WeekdayHeaderProps {
@@ -19,15 +19,15 @@ interface WeekdayHeaderProps {
 }
 
 const WeekdayHeader = memo(({ weekDays, size }: WeekdayHeaderProps) => (
-  <div className={cn("grid grid-cols-7 mb-1", GRID_STYLES[size].gap, GRID_STYLES[size].headerText)} role="row">
+  <div className={cn("mb-1.5 grid grid-cols-7", GRID_STYLES[size].gap, GRID_STYLES[size].headerText)} role="row">
     {weekDays.map((label, index) => (
       <div
         key={index}
-        className="flex h-4 items-center justify-center font-medium uppercase tracking-wide text-muted-foreground/60"
+        className="flex h-5 items-center justify-center font-medium uppercase tracking-[0.04em] text-muted-foreground/50"
         role="columnheader"
         aria-label={label}
       >
-        {label}
+        {Array.from(label)[0]}
       </div>
     ))}
   </div>
@@ -35,11 +35,22 @@ const WeekdayHeader = memo(({ weekDays, size }: WeekdayHeaderProps) => (
 WeekdayHeader.displayName = "WeekdayHeader";
 
 export const MonthCalendar = memo((props: MonthCalendarProps) => {
-  const { month, data, maxCount, size = "default", onClick, className, disableTooltips = false } = props;
+  const {
+    month,
+    data,
+    maxCount,
+    size = "default",
+    onClick,
+    selectedDate,
+    className,
+    disableTooltips = false,
+    timeBasis = "create_time",
+  } = props;
   const t = useTranslate();
   const { generalSetting } = useInstance();
   const today = useTodayDate();
   const weekDays = useWeekdayLabels();
+  const gridStyle = GRID_STYLES[size];
 
   const { weeks, weekDays: rotatedWeekDays } = useCalendarMatrix({
     month,
@@ -47,7 +58,7 @@ export const MonthCalendar = memo((props: MonthCalendarProps) => {
     weekDays,
     weekStartDayOffset: generalSetting.weekStartDayOffset,
     today,
-    selectedDate: "",
+    selectedDate: selectedDate ?? "",
   });
 
   const flatDays = useMemo(() => weeks.flatMap((week) => week.days), [weeks]);
@@ -56,13 +67,13 @@ export const MonthCalendar = memo((props: MonthCalendarProps) => {
     <div className={cn("flex flex-col", className)} role="grid" aria-label={`Calendar for ${month}`}>
       <WeekdayHeader weekDays={rotatedWeekDays} size={size} />
 
-      <div className={cn("grid grid-cols-7", GRID_STYLES[size].gap)} role="rowgroup">
+      <div className={cn("grid grid-cols-7", gridStyle.gap)} role="rowgroup">
         {flatDays.map((day) => (
           <CalendarCell
             key={day.date}
             day={day}
             maxCount={maxCount}
-            tooltipText={getTooltipText(day.count, day.date, t)}
+            tooltipText={getTooltipText(day.count, day.date, t, timeBasis)}
             onClick={onClick}
             size={size}
             disableTooltip={disableTooltips}

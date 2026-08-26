@@ -1,19 +1,26 @@
 import { create } from "@bufbuild/protobuf";
-import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, type ReactNode, useCallback, useContext, useMemo, useRef, useState } from "react";
 import { instanceServiceClient } from "@/connect";
-import { updateInstanceConfig } from "@/instance-config";
+import { useAccessSetting, useUpdateInstanceSetting } from "@/hooks/useInstanceQueries";
 import {
   InstanceProfile,
   InstanceProfileSchema,
   InstanceSetting,
+  InstanceSetting_AccessSetting,
+  InstanceSetting_AccessSettingSchema,
+  InstanceSetting_AISetting,
+  InstanceSetting_AISettingSchema,
   InstanceSetting_GeneralSetting,
   InstanceSetting_GeneralSettingSchema,
   InstanceSetting_Key,
   InstanceSetting_MemoRelatedSetting,
   InstanceSetting_MemoRelatedSettingSchema,
+  InstanceSetting_NotificationSetting,
+  InstanceSetting_NotificationSettingSchema,
   InstanceSetting_StorageSetting,
   InstanceSetting_StorageSettingSchema,
 } from "@/types/proto/api/v1/instance_service_pb";
+import { setManagedAttachmentInstanceUrl } from "@/utils/managed-attachment";
 
 const instanceSettingNamePrefix = "instance/settings/";
 
@@ -25,6 +32,8 @@ const buildInstanceSettingName = (key: InstanceSetting_Key): string => {
 interface InstanceState {
   profile: InstanceProfile;
   settings: InstanceSetting[];
+  /** Instance profile has settled, while non-routing settings may still be loading. */
+  isProfileInitialized: boolean;
   isInitialized: boolean;
   isLoading: boolean;
   // True only when the profile was successfully fetched from the server.
@@ -34,11 +43,15 @@ interface InstanceState {
 }
 
 interface InstanceContextValue extends InstanceState {
+  accessSetting: InstanceSetting_AccessSetting;
   generalSetting: InstanceSetting_GeneralSetting;
   memoRelatedSetting: InstanceSetting_MemoRelatedSetting;
   storageSetting: InstanceSetting_StorageSetting;
+  notificationSetting: InstanceSetting_NotificationSetting;
+  aiSetting: InstanceSetting_AISetting;
   initialize: () => Promise<void>;
   fetchSetting: (key: InstanceSetting_Key) => Promise<void>;
+  fetchSettings: (keys: InstanceSetting_Key[]) => Promise<void>;
   updateSetting: (setting: InstanceSetting) => Promise<void>;
 }
 
@@ -48,12 +61,24 @@ export function InstanceProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<InstanceState>({
     profile: create(InstanceProfileSchema, {}),
     settings: [],
+    isProfileInitialized: false,
     isInitialized: false,
     isLoading: true,
     profileLoaded: false,
   });
 
+  const fetchedSettingsRef = useRef<Set<string>>(new Set());
+  const { data: queriedAccessSetting } = useAccessSetting();
+  const { mutateAsync: updateAccessSetting } = useUpdateInstanceSetting();
+
   // Memoize derived settings to prevent unnecessary recalculations
+  const accessSetting = useMemo((): InstanceSetting_AccessSetting => {
+    if (queriedAccessSetting) {
+      return queriedAccessSetting;
+    }
+    return create(InstanceSetting_AccessSettingSchema, { accessMode: state.profile.accessMode });
+  }, [queriedAccessSetting, state.profile.accessMode]);
+
   const generalSetting = useMemo((): InstanceSetting_GeneralSetting => {
     const setting = state.settings.find((s) => s.name === `${instanceSettingNamePrefix}GENERAL`);
     if (setting?.value.case === "generalSetting") {
@@ -78,72 +103,168 @@ export function InstanceProvider({ children }: { children: ReactNode }) {
     return create(InstanceSetting_StorageSettingSchema, {});
   }, [state.settings]);
 
+  const notificationSetting = useMemo((): InstanceSetting_NotificationSetting => {
+    const setting = state.settings.find((s) => s.name === `${instanceSettingNamePrefix}NOTIFICATION`);
+    if (setting?.value.case === "notificationSetting") {
+      return setting.value.value;
+    }
+    return create(InstanceSetting_NotificationSettingSchema, {});
+  }, [state.settings]);
+
+  const aiSetting = useMemo((): InstanceSetting_AISetting => {
+    const setting = state.settings.find((s) => s.name === `${instanceSettingNamePrefix}AI`);
+    if (setting?.value.case === "aiSetting") {
+      return setting.value.value;
+    }
+    return create(InstanceSetting_AISettingSchema, {});
+  }, [state.settings]);
+
   const initialize = useCallback(async () => {
     setState((prev) => ({ ...prev, isLoading: true }));
-    try {
-      const profile = await instanceServiceClient.getInstanceProfile({});
 
-      const [generalSetting, memoRelatedSettingResponse] = await Promise.all([
-        instanceServiceClient.getInstanceSetting({ name: buildInstanceSettingName(InstanceSetting_Key.GENERAL) }),
-        instanceServiceClient.getInstanceSetting({ name: buildInstanceSettingName(InstanceSetting_Key.MEMO_RELATED) }),
-      ]);
-
-      // Update global config for non-React code (like connect.ts interceptors)
-      if (memoRelatedSettingResponse.value.case === "memoRelatedSetting") {
-        updateInstanceConfig({
-          memoRelatedSetting: {
-            disallowPublicVisibility: memoRelatedSettingResponse.value.value.disallowPublicVisibility,
-          },
-        });
-      }
-
-      setState({
-        profile,
-        settings: [generalSetting, memoRelatedSettingResponse],
-        isInitialized: true,
-        isLoading: false,
-        profileLoaded: true,
+    const profileRequest = instanceServiceClient
+      .getInstanceProfile({})
+      .then((profile) => {
+        // Managed attachment URLs are resolved against the instance URL, and the
+        // parser runs outside React (card layout estimation), so it reads the
+        // value from module scope rather than from this context.
+        setManagedAttachmentInstanceUrl(profile.instanceUrl);
+        setState((prev) => ({
+          ...prev,
+          profile,
+          isProfileInitialized: true,
+          profileLoaded: true,
+        }));
+      })
+      .catch((error) => {
+        console.error("Failed to initialize instance profile:", error);
+        setState((prev) => ({ ...prev, isProfileInitialized: true }));
       });
-    } catch (error) {
-      console.error("Failed to initialize instance:", error);
+
+    const settingsRequest = instanceServiceClient
+      .batchGetInstanceSettings({
+        names: [buildInstanceSettingName(InstanceSetting_Key.GENERAL), buildInstanceSettingName(InstanceSetting_Key.MEMO_RELATED)],
+      })
+      .then((settingsResponse) => {
+        for (const setting of settingsResponse.settings) {
+          fetchedSettingsRef.current.add(setting.name);
+        }
+        setState((prev) => ({ ...prev, settings: settingsResponse.settings }));
+      })
+      .catch((error) => {
+        console.error("Failed to initialize instance settings:", error);
+      });
+
+    // Profile and settings are independent. Starting both together removes one
+    // network round trip; the profile can unlock routing before settings settle.
+    await Promise.all([profileRequest, settingsRequest]);
+    setState((prev) => ({
+      ...prev,
+      isInitialized: true,
+      isLoading: false,
+    }));
+  }, []);
+
+  const fetchSettings = useCallback(async (keys: InstanceSetting_Key[]) => {
+    const names = keys
+      .filter((key) => key !== InstanceSetting_Key.ACCESS)
+      .map(buildInstanceSettingName)
+      .filter((name) => !fetchedSettingsRef.current.has(name));
+    if (names.length === 0) {
+      return;
+    }
+
+    for (const name of names) {
+      fetchedSettingsRef.current.add(name);
+    }
+
+    try {
+      const response = await instanceServiceClient.batchGetInstanceSettings({ names });
+      const fetchedNames = new Set(response.settings.map((setting) => setting.name));
       setState((prev) => ({
         ...prev,
-        isInitialized: true,
-        isLoading: false,
+        settings: [...prev.settings.filter((setting) => !fetchedNames.has(setting.name)), ...response.settings],
       }));
+    } catch (error) {
+      for (const name of names) {
+        fetchedSettingsRef.current.delete(name);
+      }
+      throw error;
     }
   }, []);
 
   const fetchSetting = useCallback(async (key: InstanceSetting_Key) => {
-    const setting = await instanceServiceClient.getInstanceSetting({
-      name: buildInstanceSettingName(key),
-    });
-    setState((prev) => ({
-      ...prev,
-      settings: [...prev.settings.filter((s) => s.name !== setting.name), setting],
-    }));
+    // ACCESS is always fetched and cached by useAccessSetting.
+    if (key === InstanceSetting_Key.ACCESS) {
+      return;
+    }
+
+    const name = buildInstanceSettingName(key);
+    if (fetchedSettingsRef.current.has(name)) {
+      return;
+    }
+    fetchedSettingsRef.current.add(name);
+    try {
+      const setting = await instanceServiceClient.getInstanceSetting({ name });
+      setState((prev) => ({
+        ...prev,
+        settings: [...prev.settings.filter((s) => s.name !== setting.name), setting],
+      }));
+    } catch (error) {
+      fetchedSettingsRef.current.delete(name);
+      throw error;
+    }
   }, []);
 
-  const updateSetting = useCallback(async (setting: InstanceSetting) => {
-    await instanceServiceClient.updateInstanceSetting({ setting });
-    setState((prev) => ({
-      ...prev,
-      settings: [...prev.settings.filter((s) => s.name !== setting.name), setting],
-    }));
-  }, []);
+  const updateSetting = useCallback(
+    async (setting: InstanceSetting) => {
+      const isAccessSetting = setting.value.case === "accessSetting";
+      const updatedSetting = isAccessSetting
+        ? await updateAccessSetting(setting)
+        : await instanceServiceClient.updateInstanceSetting({ setting });
+      setState((prev) => ({
+        ...prev,
+        profile:
+          updatedSetting.value.case === "accessSetting"
+            ? {
+                ...prev.profile,
+                accessMode: updatedSetting.value.value.accessMode,
+              }
+            : prev.profile,
+        settings: isAccessSetting ? prev.settings : [...prev.settings.filter((s) => s.name !== updatedSetting.name), updatedSetting],
+      }));
+    },
+    [updateAccessSetting],
+  );
 
   // Memoize context value to prevent unnecessary re-renders of consumers
   const value = useMemo(
     () => ({
       ...state,
+      accessSetting,
       generalSetting,
       memoRelatedSetting,
       storageSetting,
+      notificationSetting,
+      aiSetting,
       initialize,
       fetchSetting,
+      fetchSettings,
       updateSetting,
     }),
-    [state, generalSetting, memoRelatedSetting, storageSetting, initialize, fetchSetting, updateSetting],
+    [
+      state,
+      accessSetting,
+      generalSetting,
+      memoRelatedSetting,
+      storageSetting,
+      notificationSetting,
+      aiSetting,
+      initialize,
+      fetchSetting,
+      fetchSettings,
+      updateSetting,
+    ],
   );
 
   return <InstanceContext.Provider value={value}>{children}</InstanceContext.Provider>;

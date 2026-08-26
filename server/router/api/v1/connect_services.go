@@ -31,8 +31,32 @@ func (s *ConnectServiceHandler) GetInstanceSetting(ctx context.Context, req *con
 	return connect.NewResponse(resp), nil
 }
 
+func (s *ConnectServiceHandler) BatchGetInstanceSettings(ctx context.Context, req *connect.Request[v1pb.BatchGetInstanceSettingsRequest]) (*connect.Response[v1pb.BatchGetInstanceSettingsResponse], error) {
+	resp, err := s.APIV1Service.BatchGetInstanceSettings(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
 func (s *ConnectServiceHandler) UpdateInstanceSetting(ctx context.Context, req *connect.Request[v1pb.UpdateInstanceSettingRequest]) (*connect.Response[v1pb.InstanceSetting], error) {
 	resp, err := s.APIV1Service.UpdateInstanceSetting(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (s *ConnectServiceHandler) TestInstanceEmailSetting(ctx context.Context, req *connect.Request[v1pb.TestInstanceEmailSettingRequest]) (*connect.Response[emptypb.Empty], error) {
+	resp, err := s.APIV1Service.TestInstanceEmailSetting(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (s *ConnectServiceHandler) GetInstanceStats(ctx context.Context, req *connect.Request[v1pb.GetInstanceStatsRequest]) (*connect.Response[v1pb.InstanceStats], error) {
+	resp, err := s.APIV1Service.GetInstanceStats(ctx, req.Msg)
 	if err != nil {
 		return nil, convertGRPCError(err)
 	}
@@ -79,6 +103,14 @@ func (s *ConnectServiceHandler) ListUsers(ctx context.Context, req *connect.Requ
 	return connect.NewResponse(resp), nil
 }
 
+func (s *ConnectServiceHandler) BatchGetUsers(ctx context.Context, req *connect.Request[v1pb.BatchGetUsersRequest]) (*connect.Response[v1pb.BatchGetUsersResponse], error) {
+	resp, err := s.APIV1Service.BatchGetUsers(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
 func (s *ConnectServiceHandler) GetUser(ctx context.Context, req *connect.Request[v1pb.GetUserRequest]) (*connect.Response[v1pb.User], error) {
 	resp, err := s.APIV1Service.GetUser(ctx, req.Msg)
 	if err != nil {
@@ -104,11 +136,9 @@ func (s *ConnectServiceHandler) UpdateUser(ctx context.Context, req *connect.Req
 }
 
 func (s *ConnectServiceHandler) DeleteUser(ctx context.Context, req *connect.Request[v1pb.DeleteUserRequest]) (*connect.Response[emptypb.Empty], error) {
-	resp, err := s.APIV1Service.DeleteUser(ctx, req.Msg)
-	if err != nil {
-		return nil, convertGRPCError(err)
-	}
-	return connect.NewResponse(resp), nil
+	return connectWithHeaderCarrier(ctx, func(ctx context.Context) (*emptypb.Empty, error) {
+		return s.APIV1Service.DeleteUser(ctx, req.Msg)
+	})
 }
 
 func (s *ConnectServiceHandler) ListAllUserStats(ctx context.Context, req *connect.Request[v1pb.ListAllUserStatsRequest]) (*connect.Response[v1pb.ListAllUserStatsResponse], error) {
@@ -145,6 +175,38 @@ func (s *ConnectServiceHandler) UpdateUserSetting(ctx context.Context, req *conn
 
 func (s *ConnectServiceHandler) ListUserSettings(ctx context.Context, req *connect.Request[v1pb.ListUserSettingsRequest]) (*connect.Response[v1pb.ListUserSettingsResponse], error) {
 	resp, err := s.APIV1Service.ListUserSettings(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (s *ConnectServiceHandler) ListLinkedIdentities(ctx context.Context, req *connect.Request[v1pb.ListLinkedIdentitiesRequest]) (*connect.Response[v1pb.ListLinkedIdentitiesResponse], error) {
+	resp, err := s.APIV1Service.ListLinkedIdentities(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (s *ConnectServiceHandler) CreateLinkedIdentity(ctx context.Context, req *connect.Request[v1pb.CreateLinkedIdentityRequest]) (*connect.Response[v1pb.LinkedIdentity], error) {
+	resp, err := s.APIV1Service.CreateLinkedIdentity(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (s *ConnectServiceHandler) GetLinkedIdentity(ctx context.Context, req *connect.Request[v1pb.GetLinkedIdentityRequest]) (*connect.Response[v1pb.LinkedIdentity], error) {
+	resp, err := s.APIV1Service.GetLinkedIdentity(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (s *ConnectServiceHandler) DeleteLinkedIdentity(ctx context.Context, req *connect.Request[v1pb.DeleteLinkedIdentityRequest]) (*connect.Response[emptypb.Empty], error) {
+	resp, err := s.APIV1Service.DeleteLinkedIdentity(ctx, req.Msg)
 	if err != nil {
 		return nil, convertGRPCError(err)
 	}
@@ -201,6 +263,14 @@ func (s *ConnectServiceHandler) UpdateUserWebhook(ctx context.Context, req *conn
 
 func (s *ConnectServiceHandler) DeleteUserWebhook(ctx context.Context, req *connect.Request[v1pb.DeleteUserWebhookRequest]) (*connect.Response[emptypb.Empty], error) {
 	resp, err := s.APIV1Service.DeleteUserWebhook(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (s *ConnectServiceHandler) GetUserWebhookSigningSecret(ctx context.Context, req *connect.Request[v1pb.GetUserWebhookSigningSecretRequest]) (*connect.Response[v1pb.GetUserWebhookSigningSecretResponse], error) {
+	resp, err := s.APIV1Service.GetUserWebhookSigningSecret(ctx, req.Msg)
 	if err != nil {
 		return nil, convertGRPCError(err)
 	}
@@ -345,6 +415,184 @@ func (s *ConnectServiceHandler) DeleteMemoReaction(ctx context.Context, req *con
 	return connect.NewResponse(resp), nil
 }
 
+func (s *ConnectServiceHandler) CreateMemoShare(ctx context.Context, req *connect.Request[v1pb.CreateMemoShareRequest]) (*connect.Response[v1pb.MemoShare], error) {
+	resp, err := s.APIV1Service.CreateMemoShare(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (s *ConnectServiceHandler) ListMemoShares(ctx context.Context, req *connect.Request[v1pb.ListMemoSharesRequest]) (*connect.Response[v1pb.ListMemoSharesResponse], error) {
+	resp, err := s.APIV1Service.ListMemoShares(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (s *ConnectServiceHandler) DeleteMemoShare(ctx context.Context, req *connect.Request[v1pb.DeleteMemoShareRequest]) (*connect.Response[emptypb.Empty], error) {
+	resp, err := s.APIV1Service.DeleteMemoShare(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (s *ConnectServiceHandler) GetSharedMemo(ctx context.Context, req *connect.Request[v1pb.GetSharedMemoRequest]) (*connect.Response[v1pb.Memo], error) {
+	resp, err := s.APIV1Service.GetSharedMemo(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (s *ConnectServiceHandler) GetLinkMetadata(ctx context.Context, req *connect.Request[v1pb.GetLinkMetadataRequest]) (*connect.Response[v1pb.LinkMetadata], error) {
+	resp, err := s.APIV1Service.GetLinkMetadata(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (s *ConnectServiceHandler) BatchGetLinkMetadata(ctx context.Context, req *connect.Request[v1pb.BatchGetLinkMetadataRequest]) (*connect.Response[v1pb.BatchGetLinkMetadataResponse], error) {
+	resp, err := s.APIV1Service.BatchGetLinkMetadata(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+// SpaceService
+
+func (s *ConnectServiceHandler) CreateSpace(ctx context.Context, req *connect.Request[v1pb.CreateSpaceRequest]) (*connect.Response[v1pb.Space], error) {
+	resp, err := s.APIV1Service.CreateSpace(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (s *ConnectServiceHandler) ListSpaces(ctx context.Context, req *connect.Request[v1pb.ListSpacesRequest]) (*connect.Response[v1pb.ListSpacesResponse], error) {
+	resp, err := s.APIV1Service.ListSpaces(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (s *ConnectServiceHandler) GetSpace(ctx context.Context, req *connect.Request[v1pb.GetSpaceRequest]) (*connect.Response[v1pb.Space], error) {
+	resp, err := s.APIV1Service.GetSpace(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (s *ConnectServiceHandler) UpdateSpace(ctx context.Context, req *connect.Request[v1pb.UpdateSpaceRequest]) (*connect.Response[v1pb.Space], error) {
+	resp, err := s.APIV1Service.UpdateSpace(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (s *ConnectServiceHandler) DeleteSpace(ctx context.Context, req *connect.Request[v1pb.DeleteSpaceRequest]) (*connect.Response[emptypb.Empty], error) {
+	resp, err := s.APIV1Service.DeleteSpace(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (s *ConnectServiceHandler) CreateSpaceInvitation(ctx context.Context, req *connect.Request[v1pb.CreateSpaceInvitationRequest]) (*connect.Response[v1pb.SpaceInvitation], error) {
+	resp, err := s.APIV1Service.CreateSpaceInvitation(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (s *ConnectServiceHandler) ListSpaceInvitations(ctx context.Context, req *connect.Request[v1pb.ListSpaceInvitationsRequest]) (*connect.Response[v1pb.ListSpaceInvitationsResponse], error) {
+	resp, err := s.APIV1Service.ListSpaceInvitations(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (s *ConnectServiceHandler) ListUserSpaceInvitations(ctx context.Context, req *connect.Request[v1pb.ListUserSpaceInvitationsRequest]) (*connect.Response[v1pb.ListUserSpaceInvitationsResponse], error) {
+	resp, err := s.APIV1Service.ListUserSpaceInvitations(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (s *ConnectServiceHandler) GetSpaceInvitation(ctx context.Context, req *connect.Request[v1pb.GetSpaceInvitationRequest]) (*connect.Response[v1pb.SpaceInvitation], error) {
+	resp, err := s.APIV1Service.GetSpaceInvitation(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (s *ConnectServiceHandler) DeleteSpaceInvitation(ctx context.Context, req *connect.Request[v1pb.DeleteSpaceInvitationRequest]) (*connect.Response[emptypb.Empty], error) {
+	resp, err := s.APIV1Service.DeleteSpaceInvitation(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (s *ConnectServiceHandler) AcceptSpaceInvitation(ctx context.Context, req *connect.Request[v1pb.AcceptSpaceInvitationRequest]) (*connect.Response[v1pb.SpaceMember], error) {
+	resp, err := s.APIV1Service.AcceptSpaceInvitation(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (s *ConnectServiceHandler) DeclineSpaceInvitation(ctx context.Context, req *connect.Request[v1pb.DeclineSpaceInvitationRequest]) (*connect.Response[emptypb.Empty], error) {
+	resp, err := s.APIV1Service.DeclineSpaceInvitation(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (s *ConnectServiceHandler) ListSpaceMembers(ctx context.Context, req *connect.Request[v1pb.ListSpaceMembersRequest]) (*connect.Response[v1pb.ListSpaceMembersResponse], error) {
+	resp, err := s.APIV1Service.ListSpaceMembers(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (s *ConnectServiceHandler) GetSpaceMember(ctx context.Context, req *connect.Request[v1pb.GetSpaceMemberRequest]) (*connect.Response[v1pb.SpaceMember], error) {
+	resp, err := s.APIV1Service.GetSpaceMember(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (s *ConnectServiceHandler) UpdateSpaceMember(ctx context.Context, req *connect.Request[v1pb.UpdateSpaceMemberRequest]) (*connect.Response[v1pb.SpaceMember], error) {
+	resp, err := s.APIV1Service.UpdateSpaceMember(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (s *ConnectServiceHandler) DeleteSpaceMember(ctx context.Context, req *connect.Request[v1pb.DeleteSpaceMemberRequest]) (*connect.Response[emptypb.Empty], error) {
+	resp, err := s.APIV1Service.DeleteSpaceMember(ctx, req.Msg)
+	if err != nil {
+		return nil, convertGRPCError(err)
+	}
+	return connect.NewResponse(resp), nil
+}
+
 // AttachmentService
 
 func (s *ConnectServiceHandler) CreateAttachment(ctx context.Context, req *connect.Request[v1pb.CreateAttachmentRequest]) (*connect.Response[v1pb.Attachment], error) {
@@ -387,60 +635,65 @@ func (s *ConnectServiceHandler) DeleteAttachment(ctx context.Context, req *conne
 	return connect.NewResponse(resp), nil
 }
 
-// ShortcutService
-
-func (s *ConnectServiceHandler) ListShortcuts(ctx context.Context, req *connect.Request[v1pb.ListShortcutsRequest]) (*connect.Response[v1pb.ListShortcutsResponse], error) {
-	resp, err := s.APIV1Service.ListShortcuts(ctx, req.Msg)
+func (s *ConnectServiceHandler) BatchDeleteAttachments(ctx context.Context, req *connect.Request[v1pb.BatchDeleteAttachmentsRequest]) (*connect.Response[emptypb.Empty], error) {
+	resp, err := s.APIV1Service.BatchDeleteAttachments(ctx, req.Msg)
 	if err != nil {
 		return nil, convertGRPCError(err)
 	}
 	return connect.NewResponse(resp), nil
 }
 
-func (s *ConnectServiceHandler) GetShortcut(ctx context.Context, req *connect.Request[v1pb.GetShortcutRequest]) (*connect.Response[v1pb.Shortcut], error) {
-	resp, err := s.APIV1Service.GetShortcut(ctx, req.Msg)
+// AIService
+
+func (s *ConnectServiceHandler) Transcribe(ctx context.Context, req *connect.Request[v1pb.TranscribeRequest]) (*connect.Response[v1pb.TranscribeResponse], error) {
+	resp, err := s.APIV1Service.Transcribe(ctx, req.Msg)
 	if err != nil {
 		return nil, convertGRPCError(err)
 	}
 	return connect.NewResponse(resp), nil
 }
 
-func (s *ConnectServiceHandler) CreateShortcut(ctx context.Context, req *connect.Request[v1pb.CreateShortcutRequest]) (*connect.Response[v1pb.Shortcut], error) {
-	resp, err := s.APIV1Service.CreateShortcut(ctx, req.Msg)
+// MemoViewService
+
+// ListMemoViews lists the saved memo views owned by a user.
+func (s *ConnectServiceHandler) ListMemoViews(ctx context.Context, req *connect.Request[v1pb.ListMemoViewsRequest]) (*connect.Response[v1pb.ListMemoViewsResponse], error) {
+	resp, err := s.APIV1Service.ListMemoViews(ctx, req.Msg)
 	if err != nil {
 		return nil, convertGRPCError(err)
 	}
 	return connect.NewResponse(resp), nil
 }
 
-func (s *ConnectServiceHandler) UpdateShortcut(ctx context.Context, req *connect.Request[v1pb.UpdateShortcutRequest]) (*connect.Response[v1pb.Shortcut], error) {
-	resp, err := s.APIV1Service.UpdateShortcut(ctx, req.Msg)
+// GetMemoView returns a saved memo view by resource name.
+func (s *ConnectServiceHandler) GetMemoView(ctx context.Context, req *connect.Request[v1pb.GetMemoViewRequest]) (*connect.Response[v1pb.MemoView], error) {
+	resp, err := s.APIV1Service.GetMemoView(ctx, req.Msg)
 	if err != nil {
 		return nil, convertGRPCError(err)
 	}
 	return connect.NewResponse(resp), nil
 }
 
-func (s *ConnectServiceHandler) DeleteShortcut(ctx context.Context, req *connect.Request[v1pb.DeleteShortcutRequest]) (*connect.Response[emptypb.Empty], error) {
-	resp, err := s.APIV1Service.DeleteShortcut(ctx, req.Msg)
+// CreateMemoView creates a saved memo view for a user.
+func (s *ConnectServiceHandler) CreateMemoView(ctx context.Context, req *connect.Request[v1pb.CreateMemoViewRequest]) (*connect.Response[v1pb.MemoView], error) {
+	resp, err := s.APIV1Service.CreateMemoView(ctx, req.Msg)
 	if err != nil {
 		return nil, convertGRPCError(err)
 	}
 	return connect.NewResponse(resp), nil
 }
 
-// ActivityService
-
-func (s *ConnectServiceHandler) ListActivities(ctx context.Context, req *connect.Request[v1pb.ListActivitiesRequest]) (*connect.Response[v1pb.ListActivitiesResponse], error) {
-	resp, err := s.APIV1Service.ListActivities(ctx, req.Msg)
+// UpdateMemoView updates the selected fields of a saved memo view.
+func (s *ConnectServiceHandler) UpdateMemoView(ctx context.Context, req *connect.Request[v1pb.UpdateMemoViewRequest]) (*connect.Response[v1pb.MemoView], error) {
+	resp, err := s.APIV1Service.UpdateMemoView(ctx, req.Msg)
 	if err != nil {
 		return nil, convertGRPCError(err)
 	}
 	return connect.NewResponse(resp), nil
 }
 
-func (s *ConnectServiceHandler) GetActivity(ctx context.Context, req *connect.Request[v1pb.GetActivityRequest]) (*connect.Response[v1pb.Activity], error) {
-	resp, err := s.APIV1Service.GetActivity(ctx, req.Msg)
+// DeleteMemoView deletes a saved memo view by resource name.
+func (s *ConnectServiceHandler) DeleteMemoView(ctx context.Context, req *connect.Request[v1pb.DeleteMemoViewRequest]) (*connect.Response[emptypb.Empty], error) {
+	resp, err := s.APIV1Service.DeleteMemoView(ctx, req.Msg)
 	if err != nil {
 		return nil, convertGRPCError(err)
 	}

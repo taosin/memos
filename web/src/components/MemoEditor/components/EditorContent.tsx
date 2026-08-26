@@ -1,72 +1,46 @@
 import { forwardRef } from "react";
-import Editor, { type EditorRefActions } from "../Editor";
-import { useBlobUrls, useDragAndDrop } from "../hooks";
-import { useEditorContext } from "../state";
+import Editor from "../Editor";
+import { useEditorContext, useEditorSelector } from "../state";
 import type { EditorContentProps } from "../types";
-import type { LocalFile } from "../types/attachment";
+import type { EditorController } from "../types/editorController";
 
-export const EditorContent = forwardRef<EditorRefActions, EditorContentProps>(({ placeholder }, ref) => {
-  const { state, actions, dispatch } = useEditorContext();
-  const { createBlobUrl } = useBlobUrls();
+// Imported eagerly (not React.lazy): the editor is the always-present compose
+// box on the home route, which is already code-split — so deferring the
+// CodeMirror bundle separately bought nothing and made the editor paint empty
+// for a beat before its placeholder appeared (a visible flicker on load).
 
-  const { dragHandlers } = useDragAndDrop((files: FileList) => {
-    const localFiles: LocalFile[] = Array.from(files).map((file) => ({
-      file,
-      previewUrl: createBlobUrl(file),
-    }));
-    localFiles.forEach((localFile) => dispatch(actions.addLocalFile(localFile)));
-  });
-
-  const handleCompositionStart = () => {
-    dispatch(actions.setComposing(true));
-  };
-
-  const handleCompositionEnd = () => {
-    dispatch(actions.setComposing(false));
-  };
+/**
+ * Hosts the CodeMirror Editor behind the EditorController contract. The
+ * editor serializes into state.content on every change and exposes its
+ * formatting capability for the focus-mode toolbar.
+ */
+export const EditorContent = forwardRef<EditorController, EditorContentProps>(({ placeholder, onSubmit, onFiles }, ref) => {
+  const { actions, dispatch } = useEditorContext();
+  const content = useEditorSelector((s) => s.content);
+  const contentSource = useEditorSelector((s) => s.contentSource);
+  const isFocusMode = useEditorSelector((s) => s.ui.isFocusMode);
 
   const handleContentChange = (content: string) => {
     dispatch(actions.updateContent(content));
   };
 
-  const handlePaste = (event: React.ClipboardEvent<Element>) => {
-    const clipboard = event.clipboardData;
-    if (!clipboard) return;
-
-    const files: File[] = [];
-    if (clipboard.items && clipboard.items.length > 0) {
-      for (const item of Array.from(clipboard.items)) {
-        if (item.kind !== "file") continue;
-        const file = item.getAsFile();
-        if (file) files.push(file);
-      }
-    } else if (clipboard.files && clipboard.files.length > 0) {
-      files.push(...Array.from(clipboard.files));
-    }
-
-    if (files.length === 0) return;
-
-    const localFiles: LocalFile[] = files.map((file) => ({
-      file,
-      previewUrl: createBlobUrl(file),
-    }));
-    localFiles.forEach((localFile) => dispatch(actions.addLocalFile(localFile)));
-    event.preventDefault();
+  const handleExternalContentApplied = (content: string) => {
+    dispatch(actions.setContent(content));
   };
 
   return (
-    <div className="w-full flex flex-col flex-1" {...dragHandlers}>
+    <div className="w-full flex flex-col flex-1">
       <Editor
         ref={ref}
         className="memo-editor-content"
-        initialContent={state.content}
+        initialContent={content}
+        contentIsExternal={contentSource === "external"}
         placeholder={placeholder || ""}
-        isFocusMode={state.ui.isFocusMode}
-        isInIME={state.ui.isComposing}
+        isFocusMode={isFocusMode}
         onContentChange={handleContentChange}
-        onPaste={handlePaste}
-        onCompositionStart={handleCompositionStart}
-        onCompositionEnd={handleCompositionEnd}
+        onExternalContentApplied={handleExternalContentApplied}
+        onFiles={onFiles}
+        onSubmit={onSubmit}
       />
     </div>
   );

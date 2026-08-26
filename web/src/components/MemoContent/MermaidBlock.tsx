@@ -1,4 +1,3 @@
-import mermaid from "mermaid";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
@@ -38,34 +37,55 @@ export const MermaidBlock = ({ children, className }: MermaidBlockProps) => {
     return setupSystemThemeListener(() => setSystemThemeChange((n) => n + 1));
   }, [themePreference]);
 
-  // Initialize Mermaid when theme changes
-  useEffect(() => {
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: toMermaidTheme(currentTheme),
-      securityLevel: "strict",
-      fontFamily: "inherit",
-      suppressErrorRendering: true,
-    });
-  }, [currentTheme]);
-
   // Render diagram when content or theme changes
   useEffect(() => {
-    if (!codeContent) return;
+    if (!codeContent) {
+      setSvg("");
+      setError("");
+      return;
+    }
 
-    const id = `mermaid-${Math.random().toString(36).substring(7)}`;
+    let cancelled = false;
 
-    mermaid
-      .render(id, codeContent)
-      .then(({ svg: renderedSvg }) => {
+    const renderDiagram = async () => {
+      try {
+        const { default: mermaid } = await import("mermaid");
+        // Text is measured against the final glyphs, so webfonts must be loaded
+        // first. The Font Loading API is absent in some environments (jsdom).
+        await document.fonts?.ready;
+        if (cancelled) return;
+
+        mermaid.initialize({
+          startOnLoad: false,
+          theme: toMermaidTheme(currentTheme),
+          securityLevel: "strict",
+          // Mermaid measures labels in a detached element at body level, but the
+          // rendered SVG lands inside a <pre> (monospace). "inherit" resolves to
+          // different fonts in those two places, sizing boxes too small for the
+          // final glyphs — pin the font so measurement and display agree.
+          fontFamily: getComputedStyle(document.body).fontFamily || "sans-serif",
+          suppressErrorRendering: true,
+        });
+
+        const id = `mermaid-${Math.random().toString(36).substring(7)}`;
+        const { svg: renderedSvg } = await mermaid.render(id, codeContent);
+        if (cancelled) return;
+
         setSvg(renderedSvg);
         setError("");
-      })
-      .catch((err) => {
+      } catch (err) {
+        if (cancelled) return;
         console.error("Failed to render mermaid diagram:", err);
         setSvg("");
         setError(formatErrorMessage(err));
-      });
+      }
+    };
+
+    renderDiagram();
+
+    return () => {
+      cancelled = true;
+    };
   }, [codeContent, currentTheme]);
 
   if (error) {

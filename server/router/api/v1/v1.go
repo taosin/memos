@@ -2,83 +2,135 @@ package v1
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 
 	"connectrpc.com/connect"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/labstack/echo/v5"
-	"github.com/labstack/echo/v5/middleware"
+	"github.com/pkg/errors"
 	"golang.org/x/sync/semaphore"
 
+	"github.com/usememos/memos/internal/httpgetter"
+	"github.com/usememos/memos/internal/markdown"
 	"github.com/usememos/memos/internal/profile"
-	"github.com/usememos/memos/plugin/markdown"
 	v1pb "github.com/usememos/memos/proto/gen/api/v1"
 	"github.com/usememos/memos/server/auth"
+	"github.com/usememos/memos/server/notification"
 	"github.com/usememos/memos/store"
 )
+
+// MaxAPIRequestBytes caps the size of a request body accepted by the API. The
+// in-process MCP endpoint forwards every tool call through these same routes, so
+// it derives its own limit from this constant to keep the two gates in lockstep.
+const MaxAPIRequestBytes = 256 << 20
 
 type APIV1Service struct {
 	v1pb.UnimplementedInstanceServiceServer
 	v1pb.UnimplementedAuthServiceServer
 	v1pb.UnimplementedUserServiceServer
 	v1pb.UnimplementedMemoServiceServer
+	v1pb.UnimplementedSpaceServiceServer
 	v1pb.UnimplementedAttachmentServiceServer
-	v1pb.UnimplementedShortcutServiceServer
-	v1pb.UnimplementedActivityServiceServer
+	v1pb.UnimplementedAIServiceServer
+	v1pb.UnimplementedMemoViewServiceServer
 	v1pb.UnimplementedIdentityProviderServiceServer
 
-	Secret          string
-	Profile         *profile.Profile
-	Store           *store.Store
-	MarkdownService markdown.Service
-	SSEHub          *SSEHub
+	Secret                  string
+	Profile                 *profile.Profile
+	Store                   *store.Store
+	MarkdownService         markdown.Service
+	SSEHub                  *SSEHub
+	NotificationEmailSender notification.EmailSender
 
 	// thumbnailSemaphore limits concurrent thumbnail generation to prevent memory exhaustion
-	thumbnailSemaphore *semaphore.Weighted
+	thumbnailSemaphore       *semaphore.Weighted
+	imageProcessingSemaphore *semaphore.Weighted
+
+	// instanceStatsCache memoizes GetInstanceStats results for instanceStatsCacheTTL.
+	instanceStatsCache instanceStatsCache
+
+	linkMetadataFetcher linkMetadataFetcher
 }
 
+// NewAPIV1Service creates an API v1 service with its shared dependencies.
 func NewAPIV1Service(secret string, profile *profile.Profile, store *store.Store) *APIV1Service {
 	markdownService := markdown.NewService(
 		markdown.WithTagExtension(),
+		markdown.WithMentionExtension(),
 	)
-	return &APIV1Service{
-		Secret:             secret,
-		Profile:            profile,
-		Store:              store,
-		MarkdownService:    markdownService,
-		SSEHub:             NewSSEHub(),
-		thumbnailSemaphore: semaphore.NewWeighted(3), // Limit to 3 concurrent thumbnail generations
+	service := &APIV1Service{
+		Secret:                   secret,
+		Profile:                  profile,
+		Store:                    store,
+		MarkdownService:          markdownService,
+		SSEHub:                   NewSSEHub(),
+		NotificationEmailSender:  nil,
+		thumbnailSemaphore:       semaphore.NewWeighted(3), // Limit to 3 concurrent thumbnail generations
+		imageProcessingSemaphore: semaphore.NewWeighted(2),
+	}
+	service.linkMetadataFetcher = httpgetter.NewHTMLMetaFetcher()
+	return service
+}
+
+// newGatewayMarshaler mirrors grpc-gateway's default JSON marshaler with one
+// change: EmitDefaultValues replaces EmitUnpopulated. Both keep proto3 scalar
+// defaults ("" / 0 / false) and empty lists in the payload — the generated
+// OpenAPI schema declares several of them required — but EmitUnpopulated also
+// writes `null` for every unset message field (e.g. Attachment.motion_media on
+// a plain image). No schema marks those fields nullable, so a client that
+// validates responses against the spec rejects them; the MCP tools serve the
+// same schema as their outputSchema, and strict MCP clients fail every call
+// that returns an attachment. EmitDefaultValues omits unset message fields
+// instead, which the schema already allows.
+func newGatewayMarshaler() *runtime.HTTPBodyMarshaler {
+	return &runtime.HTTPBodyMarshaler{
+		Marshaler: &runtime.JSONPb{
+			EmitDefaultValues: true,
+			DiscardUnknown:    true,
+		},
 	}
 }
 
 // RegisterGateway registers the gRPC-Gateway and Connect handlers with the given Echo instance.
 func (s *APIV1Service) RegisterGateway(ctx context.Context, echoServer *echo.Echo) error {
-	// Auth middleware for gRPC-Gateway - runs after routing, has access to method name.
-	// Uses the same PublicMethods config as the Connect AuthInterceptor.
-	authenticator := auth.NewAuthenticator(s.Store, s.Secret)
+	// Shared authorizer: one source of truth for authentication and anonymous-access
+	// policy, used by both the gRPC-Gateway middleware and the Connect interceptor.
+	authorizer := NewAuthorizer(s.Store, s.Secret)
+
+	// grpc-gateway does not hand the matched procedure to middleware:
+	// runtime.RPCMethod is only populated by the generated handler, which runs
+	// after middleware. Resolve the procedure from the proto HTTP bindings
+	// instead so the policy check actually runs on this transport.
+	routeResolver, err := newGatewayRouteResolver()
+	if err != nil {
+		return errors.Wrap(err, "failed to build gateway route resolver")
+	}
+
 	gatewayAuthMiddleware := func(next runtime.HandlerFunc) runtime.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request, pathParams map[string]string) {
+			// grpc-gateway does not pass through the Connect metadata interceptor.
+			// Apply the same no-store policy here so a memo that later loses access
+			// cannot remain readable from a browser or intermediary response cache.
+			setAPIResponseNoStoreHeaders(w.Header())
 			ctx := r.Context()
 
-			// Get the RPC method name from context (set by grpc-gateway after routing)
-			rpcMethod, ok := runtime.RPCMethod(ctx)
-
-			// Extract credentials from HTTP headers
 			authHeader := r.Header.Get("Authorization")
+			result := authorizer.Authenticate(ctx, authHeader)
 
-			result := authenticator.Authenticate(ctx, authHeader)
-
-			// Enforce authentication for non-public methods
-			// If rpcMethod cannot be determined, allow through, service layer will handle visibility checks
-			if result == nil && ok && !IsPublicMethod(rpcMethod) {
-				http.Error(w, `{"code": 16, "message": "authentication required"}`, http.StatusUnauthorized)
+			// An unresolved path yields an empty procedure, which CheckAccess
+			// treats as protected: authenticated callers pass and anonymous ones
+			// are refused. Failing closed keeps a routing gap from becoming an
+			// access-control gap.
+			procedure, _ := routeResolver.resolveRequest(r)
+			if err := authorizer.CheckAccess(ctx, procedure, result); err != nil {
+				writeGatewayAuthorizationError(w, err)
 				return
 			}
 
-			// Apply auth result to context (no-op when result is nil for public endpoints)
+			// Apply the identity to the context (no-op for permitted anonymous requests).
 			if result != nil {
-				ctx = auth.ApplyToContext(ctx, result)
-				r = r.WithContext(ctx)
+				r = r.WithContext(auth.ApplyToContext(ctx, result))
 			}
 
 			next(w, r, pathParams)
@@ -87,6 +139,7 @@ func (s *APIV1Service) RegisterGateway(ctx context.Context, echoServer *echo.Ech
 
 	// Create gRPC-Gateway mux with auth middleware.
 	gwMux := runtime.NewServeMux(
+		runtime.WithMarshalerOption(runtime.MIMEWildcard, newGatewayMarshaler()),
 		runtime.WithMiddlewares(gatewayAuthMiddleware),
 	)
 	if err := v1pb.RegisterInstanceServiceHandlerServer(ctx, gwMux, s); err != nil {
@@ -101,27 +154,25 @@ func (s *APIV1Service) RegisterGateway(ctx context.Context, echoServer *echo.Ech
 	if err := v1pb.RegisterMemoServiceHandlerServer(ctx, gwMux, s); err != nil {
 		return err
 	}
+	if err := v1pb.RegisterSpaceServiceHandlerServer(ctx, gwMux, s); err != nil {
+		return err
+	}
 	if err := v1pb.RegisterAttachmentServiceHandlerServer(ctx, gwMux, s); err != nil {
 		return err
 	}
-	if err := v1pb.RegisterShortcutServiceHandlerServer(ctx, gwMux, s); err != nil {
+	if err := v1pb.RegisterAIServiceHandlerServer(ctx, gwMux, s); err != nil {
 		return err
 	}
-	if err := v1pb.RegisterActivityServiceHandlerServer(ctx, gwMux, s); err != nil {
+	if err := v1pb.RegisterMemoViewServiceHandlerServer(ctx, gwMux, s); err != nil {
 		return err
 	}
 	if err := v1pb.RegisterIdentityProviderServiceHandlerServer(ctx, gwMux, s); err != nil {
 		return err
 	}
 	gwGroup := echoServer.Group("")
-	gwGroup.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins: []string{"*"},
-	}))
 	// Register SSE endpoint with same CORS as rest of /api/v1.
-	gwGroup.GET("/api/v1/sse", func(c *echo.Context) error {
-		return handleSSE(c, s.SSEHub, auth.NewAuthenticator(s.Store, s.Secret))
-	})
-	handler := echo.WrapHandler(gwMux)
+	RegisterSSERoutes(gwGroup, s.SSEHub, s.Store, s.Secret)
+	handler := echo.WrapHandler(http.MaxBytesHandler(gwMux, MaxAPIRequestBytes))
 
 	gwGroup.Any("/api/v1/*", handler)
 	gwGroup.Any("/file/*", handler)
@@ -132,23 +183,29 @@ func (s *APIV1Service) RegisterGateway(ctx context.Context, echoServer *echo.Ech
 		NewMetadataInterceptor(), // Convert HTTP headers to gRPC metadata first
 		NewLoggingInterceptor(logStacktraces),
 		NewRecoveryInterceptor(logStacktraces),
-		NewAuthInterceptor(s.Store, s.Secret),
+		NewAuthInterceptor(authorizer),
 	)
 	connectMux := http.NewServeMux()
 	connectHandler := NewConnectServiceHandler(s)
-	connectHandler.RegisterConnectHandlers(connectMux, connectInterceptors)
+	connectHandler.RegisterConnectHandlers(connectMux, connectInterceptors, connect.WithReadMaxBytes(MaxAPIRequestBytes))
 
-	// Wrap with CORS for browser access
-	corsHandler := middleware.CORSWithConfig(middleware.CORSConfig{
-		UnsafeAllowOriginFunc: func(_ *echo.Context, origin string) (string, bool, error) {
-			return origin, true, nil
-		},
-		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodOptions},
-		AllowHeaders:     []string{"*"},
-		AllowCredentials: true,
-	})
-	connectGroup := echoServer.Group("", corsHandler)
-	connectGroup.Any("/memos.api.v1.*", echo.WrapHandler(connectMux))
+	connectGroup := echoServer.Group("")
+	connectGroup.Any("/memos.api.v1.*", echo.WrapHandler(http.MaxBytesHandler(connectMux, MaxAPIRequestBytes)))
 
 	return nil
+}
+
+func setAPIResponseNoStoreHeaders(header http.Header) {
+	header.Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	header.Set("Pragma", "no-cache")
+	header.Set("Expires", "0")
+}
+
+func writeGatewayAuthorizationError(w http.ResponseWriter, err error) {
+	if errors.Is(err, ErrUnauthenticated) {
+		http.Error(w, `{"code": 16, "message": "authentication required"}`, http.StatusUnauthorized)
+		return
+	}
+	slog.Error("failed to resolve API access policy", "error", err)
+	http.Error(w, `{"code": 13, "message": "failed to resolve API access policy"}`, http.StatusInternalServerError)
 }

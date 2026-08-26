@@ -2,13 +2,14 @@ import { timestampDate } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, createClient, type Interceptor } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-web";
 import { getAccessToken, hasStoredToken, isTokenExpired, REQUEST_TOKEN_EXPIRY_BUFFER_MS, setAccessToken } from "./auth-state";
-import { ActivityService } from "./types/proto/api/v1/activity_service_pb";
+import { AIService } from "./types/proto/api/v1/ai_service_pb";
 import { AttachmentService } from "./types/proto/api/v1/attachment_service_pb";
 import { AuthService } from "./types/proto/api/v1/auth_service_pb";
 import { IdentityProviderService } from "./types/proto/api/v1/idp_service_pb";
 import { InstanceService } from "./types/proto/api/v1/instance_service_pb";
 import { MemoService } from "./types/proto/api/v1/memo_service_pb";
-import { ShortcutService } from "./types/proto/api/v1/shortcut_service_pb";
+import { MemoViewService } from "./types/proto/api/v1/memo_view_service_pb";
+import { SpaceService } from "./types/proto/api/v1/space_service_pb";
 import { UserService } from "./types/proto/api/v1/user_service_pb";
 import { redirectOnAuthFailure } from "./utils/auth-redirect";
 
@@ -121,7 +122,7 @@ async function refreshAndGetAccessToken(): Promise<string> {
   return token;
 }
 
-async function getRequestToken(): Promise<string | null> {
+export async function getRequestToken(): Promise<string | null> {
   let token = getAccessToken();
   if (!token) {
     if (!hasStoredToken()) return null;
@@ -196,8 +197,9 @@ export const userServiceClient = createClient(UserService, transport);
 // Content service clients
 export const memoServiceClient = createClient(MemoService, transport);
 export const attachmentServiceClient = createClient(AttachmentService, transport);
-export const shortcutServiceClient = createClient(ShortcutService, transport);
-export const activityServiceClient = createClient(ActivityService, transport);
+export const aiServiceClient = createClient(AIService, transport);
+export const memoViewServiceClient = createClient(MemoViewService, transport);
+export const spaceServiceClient = createClient(SpaceService, transport);
 
 // Configuration service clients
 export const identityProviderServiceClient = createClient(IdentityProviderService, transport);

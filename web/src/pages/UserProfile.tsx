@@ -1,46 +1,22 @@
 import copy from "copy-to-clipboard";
-import { ExternalLinkIcon, LayoutListIcon, type LucideIcon, MapIcon } from "lucide-react";
+import { ExternalLinkIcon } from "lucide-react";
+import { Suspense } from "react";
 import { toast } from "react-hot-toast";
 import { useParams, useSearchParams } from "react-router-dom";
 import MemoView from "@/components/MemoView";
-import PagedMemoList from "@/components/PagedMemoList";
+import PagedMemoList, { getMemoKey } from "@/components/PagedMemoList";
 import UserAvatar from "@/components/UserAvatar";
-import UserMemoMap from "@/components/UserMemoMap";
 import { Button } from "@/components/ui/button";
 import { useMemoFilters, useMemoSorting } from "@/hooks";
 import { useUser } from "@/hooks/useUserQueries";
-import { cn } from "@/lib/utils";
 import { State } from "@/types/proto/api/v1/common_pb";
 import { Memo } from "@/types/proto/api/v1/memo_service_pb";
 import { useTranslate } from "@/utils/i18n";
+import { lazyWithReload } from "@/utils/lazy";
 
 type TabView = "memos" | "map";
 
-const TabButton = ({
-  icon: Icon,
-  label,
-  isActive,
-  onClick,
-}: {
-  icon: LucideIcon;
-  label: string;
-  isActive: boolean;
-  onClick: () => void;
-}) => (
-  <button
-    type="button"
-    onClick={onClick}
-    className={cn(
-      "flex items-center gap-2 px-3 py-2 text-sm font-medium transition-all duration-200 border-b-2 rounded-t-lg",
-      isActive
-        ? "border-primary text-primary bg-primary/5"
-        : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50",
-    )}
-  >
-    <Icon className="h-4 w-4" />
-    {label}
-  </button>
-);
+const UserMemoMap = lazyWithReload(() => import("@/components/UserMemoMap"));
 
 interface User {
   name: string;
@@ -72,7 +48,7 @@ const ProfileHeader = ({ user, onCopyProfileLink, shareLabel }: { user: User; on
 const UserProfile = () => {
   const t = useTranslate();
   const username = useParams().username;
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const activeTab = (searchParams.get("view") === "map" ? "map" : "memos") as TabView;
 
   const { data: user, isLoading, error } = useUser(`users/${username}`, { enabled: !!username });
@@ -83,7 +59,7 @@ const UserProfile = () => {
 
   const memoFilter = useMemoFilters({
     creatorName: user?.name,
-    includeShortcuts: false,
+    includeMemoViews: false,
     includePinned: true,
   });
 
@@ -98,13 +74,6 @@ const UserProfile = () => {
     toast.success(t("message.copied"));
   };
 
-  const toggleTab = (view: TabView) => {
-    setSearchParams((prev) => {
-      view === "map" ? prev.set("view", "map") : prev.delete("view");
-      return prev;
-    });
-  };
-
   if (isLoading) return null;
 
   return (
@@ -113,24 +82,12 @@ const UserProfile = () => {
         <>
           <ProfileHeader user={user} onCopyProfileLink={handleCopyProfileLink} shareLabel={t("common.share")} />
 
-          <div className="border-b border-border/10 mb-4">
-            <div className="mx-auto flex max-w-2xl">
-              <TabButton
-                icon={LayoutListIcon}
-                label={t("common.memos")}
-                isActive={activeTab === "memos"}
-                onClick={() => toggleTab("memos")}
-              />
-              <TabButton icon={MapIcon} label={t("common.map")} isActive={activeTab === "map"} onClick={() => toggleTab("map")} />
-            </div>
-          </div>
-
-          <div className="flex-1">
+          <div className="mt-4 flex-1">
             <div className="mx-auto w-full max-w-2xl">
               {activeTab === "memos" ? (
                 <PagedMemoList
-                  renderer={(memo: Memo) => (
-                    <MemoView key={`${memo.name}-${memo.displayTime}`} memo={memo} showVisibility showPinned compact />
+                  renderer={(memo: Memo, { compact }) => (
+                    <MemoView key={getMemoKey(memo)} memo={memo} showVisibility showPinned showSpace compact={compact} />
                   )}
                   listSort={listSort}
                   orderBy={orderBy}
@@ -138,7 +95,9 @@ const UserProfile = () => {
                 />
               ) : (
                 <div className="">
-                  <UserMemoMap creator={user.name} className="h-[60dvh] sm:h-[500px] rounded-xl" />
+                  <Suspense fallback={<div className="h-[60dvh] sm:h-[500px] rounded-xl border border-border bg-muted/30" />}>
+                    <UserMemoMap creator={user.name} className="h-[60dvh] sm:h-[500px] rounded-xl" />
+                  </Suspense>
                 </div>
               )}
             </div>

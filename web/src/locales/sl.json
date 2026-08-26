@@ -4,12 +4,14 @@
     "description": "Lahka storitev za zapiske, kjer je na prvem mestu zasebnost. Preprosto zajemite in delite svoje odlične misli.",
     "documents": "Dokumenti",
     "github-repository": "GitHub Repo",
-    "official-website": "Uradna stran"
+    "official-website": "Uradna stran",
+    "media": "Mediji"
   },
   "auth": {
     "create-your-account": "Ustvari nov račun",
     "host-tip": "Registrirani ste kot gostitelj strani.",
     "new-password": "Novo geslo",
+    "protected-memo-notice": "This memo is not public. Sign in to continue.",
     "repeat-new-password": "Ponovi novo geslo",
     "sign-in-tip": "Že imaš račun?",
     "sign-up-tip": "Še nimaš računa?"
@@ -22,7 +24,6 @@
     "archive": "Arhiv",
     "archived": "Arhivirani",
     "attachments": "Priloge",
-    "auto-expand": "Samodejno razširi",
     "avatar": "Avatar",
     "basic": "Osnovni",
     "beta": "Beta",
@@ -38,7 +39,15 @@
     "created-at": "Ustvarjeno",
     "database": "Baza",
     "day": "Dan",
-    "days": "Dni",
+    "days": {
+      "fri": "Pet",
+      "mon": "Pon",
+      "sat": "Sob",
+      "sun": "Ned",
+      "thu": "Čet",
+      "tue": "Tor",
+      "wed": "Sre"
+    },
     "delete": "Izbriši",
     "description": "Opis",
     "edit": "Uredi",
@@ -54,9 +63,9 @@
     "input": "Vnos",
     "language": "Jezik",
     "last-updated-at": "Zadnja posodobitev",
-    "layout": "Postavitev",
     "learn-more": "Spoznaj več",
     "link": "Povezava",
+    "manage": "Upravljaj",
     "map": "Zemljevid",
     "mark": "Označi",
     "memo": "Beležka",
@@ -87,16 +96,14 @@
     "select": "Izberi",
     "settings": "Nastavitve",
     "share": "Deli",
-    "shortcut-filter": "Filter bližnjic",
-    "shortcuts": "Bližnjice",
     "sign-in": "Prijavi se",
     "sign-in-with": "Prijavi se z {{provider}}",
     "sign-out": "Odjavi se",
     "sign-up": "Registriraj",
     "statistics": "Statistika",
     "tags": "Značke",
-    "today": "Danes",
     "title": "Naslov",
+    "today": "Danes",
     "tree-mode": "Drevesni način",
     "type": "Tip",
     "unpin": "Odpni",
@@ -106,39 +113,70 @@
     "username": "Uporabniško ime",
     "version": "Verzija",
     "visibility": "Vidnost",
-    "yourself": "Ti"
+    "views": "Pogledi",
+    "yourself": "Ti",
+    "empty-placeholder": "prazno",
+    "unlink": "Prekini povezavo"
   },
-  "days": {
-    "fri": "Pet",
-    "mon": "Pon",
-    "sat": "Sob",
-    "sun": "Ned",
-    "thu": "Čet",
-    "tue": "Tor",
-    "wed": "Sre"
+  "locale-picker": {
+    "no-language-feedback": "Jezik ni bil najden? Pošlji povratne informacije"
   },
   "editor": {
     "add-your-comment-here": "Tu dodaj svoj komentar...",
     "any-thoughts": "Kakšne misli...",
     "exit-focus-mode": "Izhod iz načina osredotočanja",
     "focus-mode": "Način osredotočanja",
+    "insert-menu": {
+      "add-location": "Dodajte lokacijo",
+      "link-memo": "Beležka povezave",
+      "upload-file": "Naloži datoteko"
+    },
     "no-changes-detected": "Ni zaznanih sprememb",
     "save": "Shrani",
     "saving": "Shranjujem...",
-    "slash-commands": "Vnesi `/` za ukaze"
-  },
-  "filters": {
-    "has-code": "imaKodo",
-    "has-link": "imaPovezavo",
-    "has-task-list": "imaSeznamOpravil"
+    "audio-recorder": {
+      "attachment-label": "Zvočni posnetek",
+      "attachment-label-with-time": "Zvočni posnetek {{time}}",
+      "discard": "Zavrzi",
+      "error": "Mikrofon ni na voljo",
+      "error-description": "Po preverjanju dostopa do mikrofona za to spletno mesto poskusite znova.",
+      "idle-description": "Začnite snemati, da dodate zvočni posnetek kot prilogo.",
+      "keep": "Nadaljujte s snemanjem",
+      "pause-recording": "Začasno ustavite snemanje zvoka",
+      "play-recording": "Predvajaj zvočni posnetek",
+      "ready": "Snemanje pripravljeno",
+      "ready-description": "Predoglejte si posnetek, nato pa ga shranite kot zvočno prilogo ali zavrzite.",
+      "record-again": "Ponovno posnemi",
+      "recording": "Snemanje zvoka",
+      "recording-description": "Zajemite hitro zvočno prilogo. Trenutna dolžina: {{duration}}",
+      "requesting": "Zahtevam dostop ...",
+      "requesting-permission": "Zahtevam dostop do mikrofona",
+      "requesting-permission-description": "Za začetek snemanja omogočite dostop do mikrofona v brskalniku.",
+      "start": "Začnite snemati",
+      "stop": "Ustavi snemanje",
+      "title": "Snemalnik zvoka",
+      "trigger": "Posnemite zvok",
+      "unsupported": "Snemanje zvoka ni podprto",
+      "unsupported-description": "Ta brskalnik ne more snemati zvoka iz pisatelja beležk.",
+      "configure-ai-provider": "Najprej konfigurirajte ponudnika AI",
+      "transcribe": "Prepis",
+      "transcribe-empty": "Ni zaznanega govora",
+      "transcribe-error": "Prepis zvoka ni uspel",
+      "transcribe-success": "Transkripcija dodana",
+      "transcribing": "Prepis..."
+    }
   },
   "inbox": {
     "failed-to-load": "Ni bilo mogoče naložiti elementa prejetega",
     "memo-comment": "{{user}} je komentiral tvojo {{memo}}.",
     "no-archived": "Ni arhiviranih obvestil",
     "no-unread": "Ni neprebranih obvestil",
-    "unread": "Neprebrano",
-    "version-update": "Na voljo je nova verzija {{version}}!"
+    "unread": "Neprebrano"
+  },
+  "live-update": {
+    "connected": "Posodobitve v živo so aktivne",
+    "connecting": "Povezovanje s posodobitvami v živo ...",
+    "disconnected": "Posodobitve v živo niso na voljo"
   },
   "markdown": {
     "checkbox": "Potrditveno polje",
@@ -147,15 +185,15 @@
   },
   "memo": {
     "archived-at": "Arhivirano ob",
-    "click-to-hide-nsfw-content": "Kliknite za skrivanje NSFW vsebine",
-    "click-to-show-nsfw-content": "Kliknite za prikaz NSFW vsebine",
+    "click-to-hide-sensitive-content": "Kliknite za skrivanje NSFW vsebine",
+    "click-to-show-sensitive-content": "Kliknite za prikaz NSFW vsebine",
     "code": "Koda",
     "comment": {
       "self": "Komentarji",
       "write-a-comment": "Napiši komentar"
     },
-    "copy-link": "Kopiraj povezavo",
     "copy-content": "Kopiraj vsebino",
+    "copy-link": "Kopiraj povezavo",
     "count-memos-in-date": "{{count}} {{memos}} v {{date}}",
     "delete-confirm": "Ali ste prepričani, da želite izbrisati to beležko? TO DEJANJE JE NEPOVRATNO",
     "delete-confirm-description": "To dejanje je nepovratno. Priložene datoteke, povezave in reference bodo prav tako odstranjene.",
@@ -163,13 +201,56 @@
     "direction-asc": "Naraščajoče",
     "direction-desc": "Padajoče",
     "display-time": "Prikaži čas",
-    "filters": "Filtri",
+    "filters": {
+      "has-code": "imaKodo",
+      "has-link": "imaPovezavo",
+      "has-location": "imaLokacijo",
+      "has-task-list": "imaSeznamOpravil",
+      "label": "Filtri"
+    },
+    "compact-mode": "Strnjeni način",
+    "link-preview": "Predogled povezave",
     "links": "Povezave",
     "load-more": "Naloži več",
     "no-archived-memos": "Ni arhiviranih beležk.",
     "no-memos": "Ni beležk.",
     "order-by": "Razvrsti po",
+    "outline": "Oris",
     "search-placeholder": "Poišči beležke",
+    "share": {
+      "active-links": "Aktivne povezave za skupno rabo",
+      "copied": "Kopirano!",
+      "copy": "Kopiraj povezavo",
+      "create-failed": "Povezave za skupno rabo ni bilo mogoče ustvariti",
+      "create-link": "Ustvari novo povezavo",
+      "creating": "Ustvarjanje ...",
+      "expiry-1-day": "1 dan",
+      "expiry-30-days": "30 dni",
+      "expiry-7-days": "7 dni",
+      "expiry-label": "poteče",
+      "expiry-never": "Nikoli",
+      "expires-on": "Poteče {{date}}",
+      "invalid-link": "Ta povezava ni veljavna ali je potekla.",
+      "never-expires": "Nikoli ne poteče",
+      "no-links": "Povezav za skupno rabo še ni. Ustvarite ga spodaj.",
+      "open-panel": "Upravljanje povezav za skupno rabo",
+      "revoke": "Prekliči",
+      "revoke-failed": "Povezave ni bilo mogoče preklicati",
+      "revoked": "Povezava za skupno rabo preklicana",
+      "section-label": "Skupna raba",
+      "share": "Delite",
+      "shared-by": "V skupno rabo dal {{creator}}",
+      "title": "Delite to beležko",
+      "image-description": "Predogled, upodobljen na vaši trenutni širini naprave ({{width}}px).",
+      "image-download": "Prenesite PNG",
+      "image-download-failed": "Izvoz slike ni uspel",
+      "image-downloaded": "Slika shranjena",
+      "image-footer": "V skupni rabi z Memos",
+      "image-share": "Delite sliko",
+      "image-share-failed": "Slike ni bilo mogoče deliti",
+      "image-title": "Delite kot sliko",
+      "open-image": "Delite kot sliko"
+    },
     "show-less": "Prikaži manj",
     "show-more": "Prikaži več",
     "to-do": "Opravila",
@@ -180,8 +261,17 @@
       "protected": "Za uporabnike",
       "public": "Javno"
     },
-    "list": "Seznam",
-    "masonry": "Mozaik"
+    "count-memos-updated-in-date": "{{count}} {{memos}} posodobljeno na {{date}}",
+    "newest-first": "Najprej najnovejše",
+    "oldest-first": "Najprej najstarejši",
+    "order": "naročilo",
+    "shown-time": "Prikazani čas",
+    "task-actions": {
+      "check-all": "Preverite vse naloge",
+      "title": "Naloge",
+      "uncheck-all": "Odkljukajte vse naloge",
+      "updated": "Naloge posodobljene"
+    }
   },
   "message": {
     "archived-successfully": "Uspešno arhivirano",
@@ -252,7 +342,7 @@
     "go-to-home": "Nazaj domov"
   },
   "setting": {
-    "access-token-section": {
+    "access-token": {
       "access-token-copied-to-clipboard": "Žeton za dostop je kopiran v odložišče",
       "access-token-deleted": "Dostopni žeton `{{description}}` je izbrisan",
       "access-token-deletion": "Ali ste prepričani, da želite izbrisati dostopni žeton {{description}}? TO DEJANJE JE NEPOVRATNO.",
@@ -271,9 +361,10 @@
       },
       "description": "Seznam vseh dostopnih žetonov za vaš račun.",
       "title": "Dostopni žetoni",
-      "token": "Žeton"
+      "token": "Žeton",
+      "no-tokens-found": "Ni najdenih žetonov za dostop"
     },
-    "account-section": {
+    "account": {
       "change-password": "Zamenjaj geslo",
       "email-note": "Opcijsko",
       "export-memos": "Izvozi beležke",
@@ -284,11 +375,30 @@
       "reset-api": "Ponastavi API",
       "title": "Podatki o računu",
       "update-information": "Posodobi informacije",
-      "username-note": "Uporablja se za prijavo"
+      "username-note": "Uporablja se za prijavo",
+      "danger-area": "Nevarno območje",
+      "danger-area-description": "Tukaj so nepovratna dejanja v računu. Preden nadaljujete, jih natančno preglejte.",
+      "delete-account": "Izbriši račun",
+      "delete-account-description": "Trajno odstranite ta račun in ves povezan dostop iz tega primerka. Tega dejanja ni mogoče razveljaviti."
     },
-    "member": "Uporabnik",
-    "member-list": "Seznam uporabnikov",
-    "member-section": {
+    "instance": {
+      "disallow-change-nickname": "Onemogoči spremembo vzdevka",
+      "disallow-change-username": "Onemogoči spremembo uporabniškega imena",
+      "disallow-password-auth": "Onemogoči preverjanje gesla",
+      "disallow-user-registration": "Onemogoči registracije uporabnikov",
+      "monday": "Ponedeljek",
+      "saturday": "Sobota",
+      "sunday": "Nedelja",
+      "week-start-day": "Dan začetka tedna",
+      "access-description": "Nadzirajte prijavo, preverjanje pristnosti, urejanje profila in privzete nastavitve koledarja za ta primerek.",
+      "access-title": "Dostop in politike",
+      "disallow-change-nickname-description": "Preprečite uporabnikom, da spremenijo svoje prikazno ime.",
+      "disallow-change-username-description": "Preprečite uporabnikom spreminjanje uporabniškega imena za prijavo.",
+      "disallow-password-auth-description": "Od uporabnikov zahtevajte, da se prijavijo prek ponudnika identitete namesto prijave z geslom.",
+      "disallow-user-registration-description": "Preprečite novim uporabnikom ustvarjanje računov na strani za prijavo.",
+      "week-start-day-description": "Nadzira prvi dan, prikazan v pogledih v slogu koledarja."
+    },
+    "member": {
       "admin": "Admin",
       "archive-member": "Arhiviraj uporabnika",
       "archive-success": "{{username}} je uspešno arhiviran",
@@ -299,31 +409,57 @@
       "delete-success": "{{username}} je uspešno izbrisan",
       "delete-warning": "Ali ste prepričani, da želite izbrisati {{username}}? TO DEJANJE JE NEPOVRATNO",
       "delete-warning-description": "TO DEJANJE JE NEPOVRATNO",
+      "label": "Uporabnik",
+      "list-title": "Seznam uporabnikov",
       "restore-success": "{{username}} je uspešno obnovljen",
-      "user": "Uporabnik"
+      "user": "Uporabnik",
+      "no-members-found": "Ni članov",
+      "active": "Aktiven",
+      "archived": "Arhivirano",
+      "member-column": "član",
+      "summary-column": "Povzetek"
     },
-    "memo-related": "Beležka",
-    "memo-related-settings": {
+    "memo": {
       "content-length-limit": "Omejitev dolžine vsebine (bajt)",
-      "enable-blur-nsfw-content": "Omogoči zameglitev občutljive vsebine (NSFW)",
+      "enable-blur-sensitive-content": "Omogoči zameglitev občutljive vsebine (NSFW)",
       "enable-memo-comments": "Omogoči komentarje na beležkah",
       "enable-memo-location": "Omogoči lokacijo beležk",
+      "label": "Beležka",
       "reactions": "Odzivi",
-      "title": "Nastavitve povezane z beležko"
+      "title": "Nastavitve povezane z beležko",
+      "reactions-required": "Seznam reakcij ne sme biti prazen",
+      "add-reaction": "Dodajte reakcijo",
+      "bytes-unit": "bajtov",
+      "configured-reactions": "Konfigurirane reakcije",
+      "content-length-limit-description": "Največja velikost telesa beležke, ki jo sprejme strežnik.",
+      "double-click-edit-description": "Omogočite uporabnikom, da odprejo urejanje beležke tako, da dvokliknejo beležko.",
+      "editing-description": "Nadzorujte vedenje urejanja beležk in omejitve vsebine na strani strežnika.",
+      "editing-title": "Urejanje",
+      "reaction-placeholder": "npr. 👍",
+      "reactions-description": "Določite možnosti odziva, ki jih lahko uporabniki uporabijo za beležke.",
+      "remove-reaction": "Odstrani reakcijo"
     },
-    "my-account": "Moj račun",
-    "preference": "Nastavitve",
-    "preference-section": {
+    "my-account": {
+      "label": "Moj račun"
+    },
+    "preference": {
       "default-memo-sort-option": "Čas prikaza beležke",
       "default-memo-visibility": "Privzeta vidnost beležke",
-      "theme": "Tema"
+      "label": "Nastavitve",
+      "theme": "Tema",
+      "appearance-description": "Izberite, kako izgleda aplikacija in kateri jezik uporablja za vaš račun.",
+      "appearance-title": "Videz",
+      "default-memo-visibility-description": "Vidnost velja za novo ustvarjene beležke, razen če je spremenjena v urejevalniku.",
+      "language-description": "Takoj posodobi jezik vmesnika in ga shrani v vaš račun.",
+      "memo-defaults-description": "Nastavite privzete nastavitve, ki se uporabljajo pri sestavljanju novih beležk.",
+      "memo-defaults-title": "Privzete nastavitve beležke",
+      "theme-description": "Izbrano temo takoj uporabi v tej napravi."
     },
-    "shortcut": {
-      "delete-confirm": "Ali ste prepričani, da želite izbrisati bližnjico \"{{title}}\"?",
-      "delete-success": "Bližnjica \"{{title}}\" je uspešno izbrisana"
+    "memo-view": {
+      "delete-confirm": "Ali ste prepričani, da želite izbrisati pogled \"{{title}}\"?",
+      "delete-success": "Pogled \"{{title}}\" je uspešno izbrisan"
     },
-    "sso": "SSO",
-    "sso-section": {
+    "sso": {
       "authorization-endpoint": "Končna točka avtorizacije",
       "client-id": "ID odjemalca",
       "client-secret": "Geslo odjemalca",
@@ -335,6 +471,7 @@
       "display-name": "Prikazno ime",
       "identifier": "Identifikator",
       "identifier-filter": "Filter identifikatorja",
+      "label": "SSO",
       "no-sso-found": "Ne najdem nobenega SSO.",
       "redirect-url": "Preusmeritveni URL",
       "scopes": "Območja",
@@ -345,10 +482,49 @@
       "template": "Predloga",
       "token-endpoint": "Končna točka žetona",
       "update-sso": "Posodobi SSO",
-      "user-endpoint": "Končna točka uporabnika"
+      "user-endpoint": "Končna točka uporabnika",
+      "account": "Račun",
+      "accounts-description": "Preglejte vsakega ponudnika identitete, oglejte si trenutno stanje povezave in povežite ali prekinite povezavo zunanjih identitet s tega računa.",
+      "accounts-title": "Računi SSO",
+      "avatar-url": "Avatar URL",
+      "basic-settings": "Osnovne nastavitve",
+      "basic-settings-description": "Nastavite identiteto ponudnika, prikazno ime in pravila izbirnega identifikatorja, preden izpolnite podrobnosti OAuth.",
+      "client-secret-optional-description": "Pustite prazno, da obstoječa skrivnost odjemalca ostane nespremenjena.",
+      "configuration": "Konfiguracija",
+      "configuration-summary-description": "Prikažite bistvene elemente, ki pomagajo identificirati in revidirati ponudnika, ne da bi pri tem izpostavili celotno konfiguracijo.",
+      "create-sso-description": "Ustvarite novega ponudnika identitete za enotno prijavo, ki jo upravlja skrbnik.",
+      "endpoints": "Končne točke",
+      "extern-uid": "Zunanji ID",
+      "extern-uid-description": "To je identiteta na strani ponudnika, ki je trenutno povezana z vašim računom.",
+      "filter-disabled": "Onemogočen",
+      "identifier-filter-description": "Izbirni regularni izraz, ki se uporablja za dovoljenje ali omejitev, kateri zunanji identifikatorji se lahko prijavijo.",
+      "field-mapping": "Kartiranje terjatev",
+      "field-mapping-description": "Preslikajte polja profila navzgor, ki se uporabljajo za identifikacijo uporabnika in vnaprejšnje izpolnjevanje podatkov profila.",
+      "field-mapping-identifier-description": "Uporablja se kot stabilen zunanji identifikator pri prijavi ali povezovanju računa.",
+      "linked": "Povezano",
+      "mapping": "Kartiranje",
+      "mapping-avatar-short": "avatar",
+      "mapping-display-name-short": "ime",
+      "mapping-email-short": "e-pošta",
+      "mapping-identifier-short": "id",
+      "mapping-none": "Ni nastavljeno",
+      "not-linked": "Ni povezano",
+      "not-linked-description": "Nobena zunanja identiteta še ni povezana. Tega ponudnika lahko povežete, da se pozneje prijavite z njim.",
+      "oauth-configuration": "konfiguracija OAuth",
+      "oauth-configuration-description": "Izpolnite poverilnice odjemalca OAuth in končne točke ponudnika, uporabljene med prijavo.",
+      "provider": "Ponudnik",
+      "provider-id": "ID ponudnika",
+      "provider-id-description": "Samo male črke, številke in vezaji. Ta vrednost postane del imena vira ponudnika.",
+      "provider-uid": "UID",
+      "redirect-url-description": "Registrirajte ta povratni klic URL pri svojem ponudniku identitete, da se lahko tok avtorizacijske kode zaključi.",
+      "scope-count_one": "obseg {{count}}",
+      "scope-count_other": "{{count}} obsegi",
+      "scopes-description": "Obseg ločite s presledki. Večina ponudnikov potrebuje le majhen nabor, kot je dostop do profila ali e-pošte.",
+      "template-description": "Začnite s prednastavitvijo ponudnika, nato prilagodite poverilnice in končne točke za svojega najemnika.",
+      "unlink-success": "Nepovezan {{name}}.",
+      "update-sso-description": "Preglejte konfiguracijo ponudnika in shranite polja, ki bi se morala spremeniti."
     },
-    "storage": "Shramba",
-    "storage-section": {
+    "storage": {
       "accesskey": "Dostopni ključ",
       "accesskey-placeholder": "Dostopni ključ / ID dostopa",
       "bucket": "Vedro",
@@ -359,11 +535,11 @@
       "delete-storage": "Izbriši shrambo",
       "endpoint": "Končna točka",
       "filepath-template": "Predloga poti do datoteke",
+      "label": "Shramba",
       "local-storage-path": "Lokalna pot shrambe",
       "path": "Pot shrambe",
       "path-description": "Uporabite lahko iste dinamične spremenljivke iz lokalne shrambe, kot je {filename}",
       "path-placeholder": "pot/po/meri",
-      "presign-placeholder": "URL pred-prijave, opcijsko",
       "region": "Regija",
       "region-placeholder": "Ime regije",
       "s3-compatible-url": "S3 združljiv URL",
@@ -380,10 +556,34 @@
       "url-prefix-placeholder": "URL predpona po meri, opcijsko",
       "url-suffix": "URL pripona",
       "url-suffix-placeholder": "URL pripona po meri, opcijsko",
-      "warning-text": "Ali ste prepričani, da želite izbrisati storitev shrambe \"{{name}}\"? TO DEJANJE JE NEPOVRATNO"
+      "warning-text": "Ali ste prepričani, da želite izbrisati storitev shrambe \"{{name}}\"? TO DEJANJE JE NEPOVRATNO",
+      "accesskey-description": "ID ključa za dostop do vedra ali storitve, združljive z S3.",
+      "badge-default": "Privzeto",
+      "badge-recommended": "Priporočeno",
+      "bucket-description": "Vedro, kjer bodo shranjeni novi predmeti prilog.",
+      "current-storage-description": "Izberite, kje bodo shranjene nove priloge. Obstoječe priloge ostanejo na trenutnem mestu shranjevanja.",
+      "database-description": "Shranjujte blob priloge neposredno v bazi podatkov aplikacije.",
+      "database-note-backup": "Enostavno varnostno kopiranje skupaj z opombami o majhnih primerih.",
+      "database-note-size": "Baza podatkov se lahko hitro poveča s številnimi ali velikimi prilogami.",
+      "endpoint-description": "Končna točka storitve, kot je AWS S3, Cloudflare R2, MinIO ali drug združljiv URL.",
+      "filepath-template-description": "Uporablja ga lokalna shramba in shramba S3. Podpira {timestamp}, {uuid} in {filename}. Privzeto: sredstva/{timestamp}_{uuid}_{filename}.",
+      "local-description": "Shranite nove priloge v datotečni sistem strežnika. To je privzeto za nove primerke.",
+      "local-note-backup": "Vztrajajte in varnostno kopirajte imenik prilog, zlasti v Docker ali razmestitvah vsebnika.",
+      "local-note-path": "Relativne poti so zapisane pod imenikom podatkov profila primerka.",
+      "region-description": "Regija, ki jo zahteva ponudnik. Za nekatere združljive storitve zadostuje kateri koli niz regij, ki ga sprejme ponudnik.",
+      "s3-configuration": "konfiguracija S3",
+      "s3-configuration-description": "Konfigurirajte vedro, združljivo z S3, za nove priloge.",
+      "s3-description": "Shranite nove priloge v storitvi za shranjevanje predmetov, združljivi z S3.",
+      "s3-note-config": "Zahteva veljavno končno točko, regijo, vedro, poverilnice, dovoljenja in dostop do omrežja strežnika.",
+      "s3-note-scale": "Najboljše za velike knjižnice prilog, uvedbe v oblaku ali več primerkov aplikacij.",
+      "secretkey-description": "Skrivni dostopni ključ za vedro ali storitev, združljivo z S3.",
+      "secretkey-preserve-description": "Pustite prazno, če želite ohraniti obstoječi skrivni ključ.",
+      "selected-backend": "Izbrano",
+      "type-s3": "Shramba, združljiva z S3",
+      "use-path-style": "Uporabite slog poti URL",
+      "use-path-style-description": "Omogočite to za ponudnike, kot je MinIO ali nekatere storitve, združljive z S3, ki ne podpirajo veder v slogu virtualnega gostovanja."
     },
-    "system": "Sistem",
-    "system-section": {
+    "system": {
       "additional-script": "Dodatne skripte",
       "additional-script-placeholder": "Dodatna JavaScript koda",
       "additional-style": "Dodatni stili",
@@ -398,20 +598,25 @@
       "disable-password-login": "Onemogoči prijavo z geslom",
       "disable-password-login-final-warning": "Prosim vnesite \"POTRDI\", če veste kaj počnete.",
       "disable-password-login-warning": "To bo onemogočilo prijavo z geslom za vse uporabnike. Brez ponovnega vklopa te nastavitve v bazi, prijava ne bo več možna. Enako tudi če identiteta enotne prijave zataji. Bodite tudi zelo previdni pri odstranjevalju identitete enotne prijave",
-      "disable-public-memos": "Onemogočite javne beležke",
       "display-with-updated-time": "Prikaži s časom posodobitve",
       "enable-auto-compact": "Omogoči samodejno zgoščevanje",
       "enable-double-click-to-edit": "Omogoči dvojni klik za urejanje",
       "enable-password-login": "Omogoči prijavo z geslom",
       "enable-password-login-warning": "To bo omogočilo prijavo z geslom za vse uporabnike. Nadaljujte samo, če želite, da se uporabniki lahko prijavijo z uporabo enotne prijave in gesla",
+      "label": "Sistem",
       "max-upload-size": "Največja velikost nalaganja (MiB)",
       "max-upload-size-hint": "Priporočena velikost je 32 MiB.",
       "removed-completed-task-list-items": "Omogoči odstranitev končanih",
       "server-name": "Ime strežnika",
-      "title": "Splošno"
+      "title": "Splošno",
+      "additional-script-description": "Vnesite JavaScript v vsako spletno stran. Uporabljajte samo zaupanja vredno kodo.",
+      "additional-style-description": "Vnesite CSS v spletno aplikacijo, da prilagodite predstavitev celotne instance.",
+      "basic-description": "Konfigurirajte javno identiteto, ki jo prikazuje ta primerek.",
+      "custom-code-description": "Izbirna CSS in JavaScript za celotno instanco, ki se uporabljata za sprednji del.",
+      "custom-code-title": "Koda po meri"
     },
     "version": "Verzija",
-    "webhook-section": {
+    "webhook": {
       "create-dialog": {
         "an-easy-to-remember-name": "Ime, ki si ga lahko zapomniš",
         "create-webhook": "Ustvari webhook",
@@ -428,17 +633,125 @@
       },
       "no-webhooks-found": "Ne najdem nobenega webhooka.",
       "title": "Webhooks",
-      "url": "URL"
+      "url": "URL",
+      "label": "Webhooks"
     },
-    "instance-section": {
-      "disallow-change-nickname": "Onemogoči spremembo vzdevka",
-      "disallow-change-username": "Onemogoči spremembo uporabniškega imena",
-      "disallow-password-auth": "Onemogoči preverjanje gesla",
-      "disallow-user-registration": "Onemogoči registracije uporabnikov",
-      "monday": "Ponedeljek",
-      "saturday": "Sobota",
-      "sunday": "Nedelja",
-      "week-start-day": "Dan začetka tedna"
+    "tags": {
+      "label": "Oznake",
+      "title": "Metapodatki oznake",
+      "description": "Dodelite izbirne barve prikaza oznakam za celotno instanco ali zameglite vsebino beležke. Imena oznak se obravnavajo kot zasidrani vzorci regularnih izrazov.",
+      "background-color": "Barva ozadja",
+      "blur-content": "Zameglitev vsebine",
+      "no-tags-configured": "Metapodatki oznake niso konfigurirani.",
+      "tag-name": "Ime oznake",
+      "tag-name-placeholder": "npr. work ali project/.*",
+      "tag-already-exists": "Oznaka že obstaja.",
+      "tag-pattern-hint": "Ime oznake ali vzorec regularnega izraza (npr. project/.* se ujema z vsemi oznakami project/)",
+      "invalid-regex": "Neveljaven ali nevaren vzorec regularnega izraza.",
+      "using-default-color": "Uporaba privzete barve.",
+      "add-rule": "Dodaj pravilo",
+      "configured-rules": "Konfigurirana pravila",
+      "default-color": "Privzeto",
+      "matching-rule": "Zasidran regularni izraz",
+      "used-count": "Beležke {{count}}"
+    },
+    "ai": {
+      "add-provider": "Dodajte ponudnika",
+      "api-key": "Ključ API",
+      "api-key-required": "Potreben je ključ API.",
+      "byok-description": "Povežite OpenAI ali Gemini s ključem API iz svojega računa. Memos pokliče ponudnika neposredno s tega strežnika.",
+      "byok-key-note": "Uporabite ključ iz računa vašega ponudnika; Memos ne združuje skupnih poverilnic AI.",
+      "byok-label": "BYOK",
+      "byok-model-note": "Memos izbere podprte modele za funkcije, kot je zvočni prepis.",
+      "byok-storage-note": "Ključi ostanejo na tej instanci in so prikriti, ko se naložijo nastavitve.",
+      "byok-title": "Uporabite svoj račun AI",
+      "configured": "Konfigurirano",
+      "current-key": "Trenutni ključ: {{key}}",
+      "default-endpoint": "Privzeta končna točka",
+      "delete-provider": "Izbrisati ponudnika AI `{{title}}`?",
+      "description": "Ključe ponudnika zagotovi lastnik primerka, uporabljajo pa jih funkcije AI na strani strežnika.",
+      "dialog-description": "Dodajte ključ iz svojega računa ponudnika. Memos uporablja vgrajene modele za vsakega ponudnika; med urejanjem pustite ključ API prazen, da obdržite shranjen ključ.",
+      "edit-provider": "Uredi ponudnika",
+      "endpoint": "Končna točka",
+      "endpoint-hint": "Pustite prazno za uporabo uradne končne točke ponudnika.",
+      "integrations-description": "Ključe ponudnika zagotovi lastnik primerka, uporabljajo pa jih funkcije AI na strani strežnika.",
+      "integrations-title": "AI integracije",
+      "keep-api-key": "Pustite prazno, da obdržite obstoječi ključ",
+      "label": "AI",
+      "no-providers": "Konfiguriran ni noben ponudnik AI.",
+      "provider-title": "Ime ponudnika",
+      "provider-title-required": "Zahtevano je ime ponudnika.",
+      "provider-type": "Vrsta ponudnika",
+      "providers": "Ponudniki",
+      "transcription-description": "Nastavitve pretvorbe govora v besedilo, ki se uporabljajo pri snemanju zvoka v sestavljalniku beležk.",
+      "transcription-empty-providers": "Najprej dodajte integracijo AI, da omogočite prepis.",
+      "transcription-language-help": "Kratka oznaka ISO 639-1 (npr. en, de, zh). Pustite prazno za samodejno zaznavanje.",
+      "transcription-language-placeholder": "samodejno zaznavanje",
+      "transcription-language": "Privzeti jezik",
+      "transcription-model-help": "Prosto besedilo. Uporabite identifikator modela ponudnika — npr. šepet-1, gpt-4o-prepis, šepet-velik-v3-turbo.",
+      "transcription-model-placeholder-gemini": "gemini-2.5-flash, gemini-2.5-pro",
+      "transcription-model-placeholder-openai": "šepetanje-1, gpt-4o-prepis, gpt-4o-mini-prepis, gpt-4o-prepis-dnevnik",
+      "transcription-model": "Model",
+      "transcription-no-provider": "Brez — prepis onemogočen",
+      "transcription-prompt-help": "Izboljša črkovanje lastnih imen in žargona. OpenAI Whisper to obravnava kot mehak namig (omejitev Whisper je približno 224 žetonov). Gemini ga obravnava kot dobesedno navodilo znotraj poziva za generiranje.",
+      "transcription-prompt-placeholder": "Imena: Alice, Bob. Glosar: kubernetes, OAuth.",
+      "transcription-prompt": "Hitri namigi",
+      "transcription-provider": "Ponudnik",
+      "transcription-title": "Transkripcija",
+      "transcription-warning-no-key": "Izbrani ponudnik nima nabora ključev API. Uredite zgornjo integracijo, da jo dodate."
+    },
+    "notification": {
+      "email-description": "Pošljite kopije po e-pošti za komentarje in omembe beležk. Gmail deluje s smtp.gmail.com, vrati 587, STARTTLS in geslom za aplikacijo.",
+      "email-enabled": "Omogoči e-poštna obvestila",
+      "email-enabled-description": "E-pošta je poslana poleg obvestila v mapi »Prejeto« v aplikaciji. Izpolnite zahtevana polja, preden to omogočite uporabnikom.",
+      "email-title": "Dostava elektronske pošte",
+      "from-email": "Iz elektronske pošte",
+      "from-email-description": "Naslov pošiljatelja, prikazan v e-poštnih obvestilih. Za Gmail uporabite isti račun Gmail kot uporabniško ime SMTP.",
+      "from-name": "Od imena",
+      "from-name-description": "Prikazno ime, prikazano poleg naslova pošiljatelja. Pustite prazno, če želite prikazati samo e-poštni naslov.",
+      "label": "Obvestila",
+      "reply-to": "Odgovori na",
+      "reply-to-description": "Naslov za odgovore na e-poštna obvestila. Pustite prazno, če želite prejemati odgovore na e-poštni naslov Od.",
+      "requirement-gmail": "Zahtevano za Gmail",
+      "requirement-optional": "Neobvezno",
+      "requirement-recommended": "Priporočeno",
+      "requirement-required": "Obvezno",
+      "smtp-host": "Gostitelj SMTP",
+      "smtp-host-description": "Ime gostitelja strežnika SMTP. Za Gmail uporabite smtp.gmail.com.",
+      "smtp-password": "Geslo SMTP",
+      "smtp-password-description": "Geslo SMTP ali žeton, specifičen za aplikacijo. Gmail zahteva geslo za aplikacijo Google in ne vašega običajnega gesla za račun.",
+      "smtp-password-placeholder-existing": "Pustite prazno, če želite ohraniti trenutno geslo",
+      "smtp-password-preserve-description": "Pustite prazno, če želite ohraniti obstoječe geslo SMTP. Novo geslo za aplikacijo vnesite samo pri zamenjavi poverilnic.",
+      "smtp-port": "vrata SMTP",
+      "smtp-port-description": "Uporabite 587 z STARTTLS za Gmail in večino ponudnikov. Uporabite 465 samo, ko omogočite SSL/TLS.",
+      "smtp-username": "Uporabniško ime SMTP",
+      "smtp-username-description": "Uporabniško ime za preverjanje pristnosti. Gmail zahteva vaš polni naslov Gmail.",
+      "test-email": "Pošlji testno e-pošto",
+      "test-email-missing-recipient": "Nastavite e-poštni naslov za svoj račun, preden pošljete testno e-pošto.",
+      "test-email-sending": "Pošiljanje testne e-pošte...",
+      "test-email-success": "Testno e-poštno sporočilo je bilo poslano na {{email}}.",
+      "use-ssl": "Uporabite SSL/TLS",
+      "use-ssl-description": "Uporabite implicitni TLS, običajno z vrati 465. Izklopite to, ko uporabljate STARTTLS na vratih 587.",
+      "use-tls": "Uporabite STARTTLS",
+      "use-tls-description": "Nadgradite povezavo SMTP z STARTTLS. Naj bo to vključeno za Gmail z vrati 587."
+    },
+    "resource-stats": {
+      "label": "Viri",
+      "title": "Statistika virov",
+      "description": "Poraba virov za ta primer.",
+      "database": {
+        "title": "Baza podatkov",
+        "driver": "Voznik",
+        "size": "Velikost"
+      },
+      "local-storage": {
+        "title": "Lokalna shramba",
+        "size": "Velikost podatkovnega imenika"
+      },
+      "unknown": "Neznano",
+      "last-updated": "Nazadnje posodobljen {{ago}}",
+      "refresh": "Osveži",
+      "load-error": "Statistike ni bilo mogoče naložiti"
     }
   },
   "tag": {
@@ -464,5 +777,42 @@
     "select-visibility": "Vidnost",
     "tags": "Značke",
     "upload-attachment": "Naloži prilogo(e)"
+  },
+  "demo": {
+    "banner-description": "Spremembe so začasne in jih je mogoče ponastaviti.",
+    "banner-title": "Demo Memos",
+    "deploy-link": "Namestite svoj Memos"
+  },
+  "attachment-library": {
+    "actions": {
+      "open": "Odpri",
+      "retry": "Poskusite znova"
+    },
+    "empty": {
+      "audio": "Zvočnih prilog še ni.",
+      "documents": "Ni še prilog dokumentov.",
+      "media": "Predstavnostnih prilog še ni."
+    },
+    "errors": {
+      "load": "Nalaganje prilog ni uspelo."
+    },
+    "labels": {
+      "live": "V živo",
+      "live-photo": "Slika v živo",
+      "memo": "Beležka",
+      "not-linked": "Ni povezano",
+      "unknown-date": "Neznan datum",
+      "unused": "Nerabljeno"
+    },
+    "tabs": {
+      "audio": "Avdio",
+      "documents": "Dokumenti",
+      "media": "Mediji"
+    },
+    "unused": {
+      "confirm-description": "S tem se odstrani vsaka naložena datoteka, ki ni povezana z beležko.",
+      "description": "Ti prenosi niso bili nikoli priloženi beležki. Tukaj jih preglejte ali odstranite.",
+      "title": "Nepovezani prenosi"
+    }
   }
 }

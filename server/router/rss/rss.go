@@ -8,22 +8,18 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/gorilla/feeds"
 	"github.com/labstack/echo/v5"
 
-	"github.com/usememos/memos/internal/profile"
-	"github.com/usememos/memos/plugin/markdown"
+	"github.com/usememos/memos/internal/markdown"
 	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/store"
 )
 
 const (
-	maxRSSItemCount      = 100
-	defaultCacheDuration = 1 * time.Hour
-	maxCacheSize         = 50 // Maximum number of cached feeds
+	maxRSSItemCount = 100
 )
 
 var (
@@ -31,22 +27,9 @@ var (
 	markdownHeadingRegex = regexp.MustCompile(`^#{1,6}\s*`)
 )
 
-// cacheEntry represents a cached RSS feed with expiration.
-type cacheEntry struct {
-	content      string
-	etag         string
-	lastModified time.Time
-	createdAt    time.Time
-}
-
 type RSSService struct {
-	Profile         *profile.Profile
 	Store           *store.Store
 	MarkdownService markdown.Service
-
-	// Cache for RSS feeds
-	cache      map[string]*cacheEntry
-	cacheMutex sync.RWMutex
 }
 
 type RSSHeading struct {
@@ -55,12 +38,11 @@ type RSSHeading struct {
 	Language    string
 }
 
-func NewRSSService(profile *profile.Profile, store *store.Store, markdownService markdown.Service) *RSSService {
+// NewRSSService creates an RSS service backed by the store and markdown renderer.
+func NewRSSService(store *store.Store, markdownService markdown.Service) *RSSService {
 	return &RSSService{
-		Profile:         profile,
 		Store:           store,
 		MarkdownService: markdownService,
-		cache:           make(map[string]*cacheEntry),
 	}
 }
 
@@ -71,24 +53,22 @@ func (s *RSSService) RegisterRoutes(g *echo.Group) {
 
 func (s *RSSService) GetExploreRSS(c *echo.Context) error {
 	ctx := c.Request().Context()
-	cacheKey := "explore"
-
-	// Check cache first
-	if cached := s.getFromCache(cacheKey); cached != nil {
-		// Check ETag for conditional request
-		if c.Request().Header.Get("If-None-Match") == cached.etag {
-			return c.NoContent(http.StatusNotModified)
-		}
-		s.setRSSHeaders(c, cached.etag, cached.lastModified)
-		return c.String(http.StatusOK, cached.content)
+	allowAnonymous, err := s.Store.AllowsAnonymousAccess(ctx)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get instance access policy").Wrap(err)
+	}
+	if !allowAnonymous {
+		return echo.NewHTTPError(http.StatusNotFound, "RSS is unavailable")
 	}
 
 	normalStatus := store.Normal
 	limit := maxRSSItemCount
 	memoFind := store.FindMemo{
-		RowStatus:      &normalStatus,
-		VisibilityList: []store.Visibility{store.Public},
-		Limit:          &limit,
+		RowStatus:       &normalStatus,
+		VisibilityList:  []store.Visibility{store.Public},
+		Access:          &store.MemoAccessScope{AllowPublic: true},
+		ExcludeComments: true,
+		Limit:           &limit,
 	}
 	memoList, err := s.Store.ListMemos(ctx, &memoFind)
 	if err != nil {
@@ -101,27 +81,25 @@ func (s *RSSService) GetExploreRSS(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to generate rss").Wrap(err)
 	}
 
-	// Cache the result
-	etag := s.putInCache(cacheKey, rss, lastModified)
+	etag := rssETag(rss)
 	s.setRSSHeaders(c, etag, lastModified)
+	if c.Request().Header.Get("If-None-Match") == etag {
+		return c.NoContent(http.StatusNotModified)
+	}
 	return c.String(http.StatusOK, rss)
 }
 
 func (s *RSSService) GetUserRSS(c *echo.Context) error {
 	ctx := c.Request().Context()
-	username := c.Param("username")
-	cacheKey := "user:" + username
-
-	// Check cache first
-	if cached := s.getFromCache(cacheKey); cached != nil {
-		// Check ETag for conditional request
-		if c.Request().Header.Get("If-None-Match") == cached.etag {
-			return c.NoContent(http.StatusNotModified)
-		}
-		s.setRSSHeaders(c, cached.etag, cached.lastModified)
-		return c.String(http.StatusOK, cached.content)
+	allowAnonymous, err := s.Store.AllowsAnonymousAccess(ctx)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get instance access policy").Wrap(err)
+	}
+	if !allowAnonymous {
+		return echo.NewHTTPError(http.StatusNotFound, "RSS is unavailable")
 	}
 
+	username := c.Param("username")
 	user, err := s.Store.GetUser(ctx, &store.FindUser{
 		Username: &username,
 	})
@@ -135,10 +113,12 @@ func (s *RSSService) GetUserRSS(c *echo.Context) error {
 	normalStatus := store.Normal
 	limit := maxRSSItemCount
 	memoFind := store.FindMemo{
-		CreatorID:      &user.ID,
-		RowStatus:      &normalStatus,
-		VisibilityList: []store.Visibility{store.Public},
-		Limit:          &limit,
+		CreatorID:       &user.ID,
+		RowStatus:       &normalStatus,
+		VisibilityList:  []store.Visibility{store.Public},
+		Access:          &store.MemoAccessScope{AllowPublic: true},
+		ExcludeComments: true,
+		Limit:           &limit,
 	}
 	memoList, err := s.Store.ListMemos(ctx, &memoFind)
 	if err != nil {
@@ -151,9 +131,11 @@ func (s *RSSService) GetUserRSS(c *echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "Failed to generate rss").Wrap(err)
 	}
 
-	// Cache the result
-	etag := s.putInCache(cacheKey, rss, lastModified)
+	etag := rssETag(rss)
 	s.setRSSHeaders(c, etag, lastModified)
+	if c.Request().Header.Get("If-None-Match") == etag {
+		return c.NoContent(http.StatusNotModified)
+	}
 	return c.String(http.StatusOK, rss)
 }
 
@@ -163,24 +145,27 @@ func (s *RSSService) generateRSSFromMemoList(ctx context.Context, memoList []*st
 		return "", time.Time{}, err
 	}
 
+	itemCountLimit := min(len(memoList), maxRSSItemCount)
+	// Derive channel timestamps only from feed data. Using the request time here
+	// changes an otherwise identical body and defeats ETag revalidation.
+	var lastModified time.Time
+	for _, memo := range memoList[:itemCountLimit] {
+		if updated := time.Unix(memo.UpdatedTs, 0); updated.After(lastModified) {
+			lastModified = updated
+		}
+	}
 	feed := &feeds.Feed{
 		Title:       rssHeading.Title,
 		Link:        &feeds.Link{Href: baseURL},
 		Description: rssHeading.Description,
-		Created:     time.Now(),
+		Created:     lastModified,
+		Updated:     lastModified,
 	}
 
-	var itemCountLimit = min(len(memoList), maxRSSItemCount)
 	if itemCountLimit == 0 {
 		// Return empty feed if no memos
 		rss, err := feed.ToRss()
 		return rss, time.Time{}, err
-	}
-
-	// Track the most recent update time for Last-Modified header
-	var lastModified time.Time
-	if len(memoList) > 0 {
-		lastModified = time.Unix(memoList[0].UpdatedTs, 0)
 	}
 
 	// Batch load all attachments for all memos to avoid N+1 query problem
@@ -211,18 +196,24 @@ func (s *RSSService) generateRSSFromMemoList(ctx context.Context, memoList []*st
 		creatorMap[user.ID] = user
 	} else {
 		// Multi-user feed - batch load all unique creators
-		creatorIDs := make(map[int32]bool)
+		creatorIDList := []int32{}
+		creatorIDMap := make(map[int32]bool)
 		for _, memo := range memoList[:itemCountLimit] {
-			creatorIDs[memo.CreatorID] = true
+			if !creatorIDMap[memo.CreatorID] {
+				creatorIDList = append(creatorIDList, memo.CreatorID)
+				creatorIDMap[memo.CreatorID] = true
+			}
 		}
 
-		// Batch load all users with a single query by getting all users and filtering
-		// Note: This is more efficient than N separate queries
-		for creatorID := range creatorIDs {
-			creator, err := s.Store.GetUser(ctx, &store.FindUser{ID: &creatorID})
-			if err == nil && creator != nil {
-				creatorMap[creatorID] = creator
-			}
+		// Batch load all users with a single query
+		users, err := s.Store.ListUsers(ctx, &store.FindUser{
+			IDList: creatorIDList,
+		})
+		if err != nil {
+			return "", lastModified, err
+		}
+		for _, creator := range users {
+			creatorMap[creator.ID] = creator
 		}
 	}
 
@@ -271,10 +262,10 @@ func (s *RSSService) generateRSSFromMemoList(ctx context.Context, memoList []*st
 		if attachments, ok := attachmentsByMemoID[memo.ID]; ok && len(attachments) > 0 {
 			attachment := attachments[0]
 			enclosure := feeds.Enclosure{}
-			if attachment.StorageType == storepb.AttachmentStorageType_EXTERNAL || attachment.StorageType == storepb.AttachmentStorageType_S3 {
+			if attachment.StorageType == storepb.AttachmentStorageType_EXTERNAL {
 				enclosure.Url = attachment.Reference
 			} else {
-				enclosure.Url = fmt.Sprintf("%s/file/attachments/%s/%s", baseURL, attachment.UID, attachment.Filename)
+				enclosure.Url = fmt.Sprintf("%s/file/attachments/%s", baseURL, attachment.UID)
 			}
 			enclosure.Length = strconv.Itoa(int(attachment.Size))
 			enclosure.Type = attachment.Type
@@ -335,66 +326,17 @@ func (s *RSSService) getRSSItemDescription(content string) (string, error) {
 	return html, nil
 }
 
-// getFromCache retrieves a cached feed entry if it exists and is not expired.
-func (s *RSSService) getFromCache(key string) *cacheEntry {
-	s.cacheMutex.RLock()
-	entry, exists := s.cache[key]
-	s.cacheMutex.RUnlock()
-
-	if !exists {
-		return nil
-	}
-
-	// Check if cache entry is still valid
-	if time.Since(entry.createdAt) > defaultCacheDuration {
-		// Entry is expired, remove it
-		s.cacheMutex.Lock()
-		delete(s.cache, key)
-		s.cacheMutex.Unlock()
-		return nil
-	}
-
-	return entry
-}
-
-// putInCache stores a feed in the cache and returns its ETag.
-func (s *RSSService) putInCache(key, content string, lastModified time.Time) string {
-	s.cacheMutex.Lock()
-	defer s.cacheMutex.Unlock()
-
-	// Generate ETag from content hash
+func rssETag(content string) string {
 	hash := sha256.Sum256([]byte(content))
-	etag := fmt.Sprintf(`"%x"`, hash[:8])
-
-	// Implement simple LRU: if cache is too large, remove oldest entries
-	if len(s.cache) >= maxCacheSize {
-		var oldestKey string
-		var oldestTime time.Time
-		for k, v := range s.cache {
-			if oldestKey == "" || v.createdAt.Before(oldestTime) {
-				oldestKey = k
-				oldestTime = v.createdAt
-			}
-		}
-		if oldestKey != "" {
-			delete(s.cache, oldestKey)
-		}
-	}
-
-	s.cache[key] = &cacheEntry{
-		content:      content,
-		etag:         etag,
-		lastModified: lastModified,
-		createdAt:    time.Now(),
-	}
-
-	return etag
+	return fmt.Sprintf(`"%x"`, hash[:8])
 }
 
 // setRSSHeaders sets appropriate HTTP headers for RSS responses.
 func (*RSSService) setRSSHeaders(c *echo.Context, etag string, lastModified time.Time) {
 	c.Response().Header().Set(echo.HeaderContentType, "application/rss+xml; charset=utf-8")
-	c.Response().Header().Set(echo.HeaderCacheControl, fmt.Sprintf("public, max-age=%d", int(defaultCacheDuration.Seconds())))
+	// Revalidation is mandatory because an audience change must not leave a
+	// previously PUBLIC memo readable from a stale feed body.
+	c.Response().Header().Set(echo.HeaderCacheControl, "public, no-cache")
 	c.Response().Header().Set("ETag", etag)
 	if !lastModified.IsZero() {
 		c.Response().Header().Set("Last-Modified", lastModified.UTC().Format(http.TimeFormat))

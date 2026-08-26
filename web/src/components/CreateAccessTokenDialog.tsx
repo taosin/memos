@@ -30,7 +30,7 @@ function CreateAccessTokenDialog({ open, onOpenChange, onSuccess }: Props) {
   const currentUser = useCurrentUser();
   const [state, setState] = useState({
     description: "",
-    expiration: 30, // Default: 30 days
+    expiration: 0, // Default: never expires
   });
   const [createdToken, setCreatedToken] = useState<string | null>(null);
   const requestState = useLoading(false);
@@ -38,16 +38,16 @@ function CreateAccessTokenDialog({ open, onOpenChange, onSuccess }: Props) {
   // Expiration options in days (0 = never expires)
   const expirationOptions = [
     {
-      label: t("setting.access-token-section.create-dialog.duration-1m"),
+      label: t("setting.access-token.create-dialog.duration-never"),
+      value: 0,
+    },
+    {
+      label: t("setting.access-token.create-dialog.duration-1m"),
       value: 30,
     },
     {
-      label: "90 Days",
+      label: t("setting.access-token.create-dialog.duration-90d"),
       value: 90,
-    },
-    {
-      label: t("setting.access-token-section.create-dialog.duration-never"),
-      value: 0,
     },
   ];
 
@@ -109,7 +109,7 @@ function CreateAccessTokenDialog({ open, onOpenChange, onSuccess }: Props) {
     if (!open) return;
     setState({
       description: "",
-      expiration: 30,
+      expiration: 0,
     });
     setCreatedToken(null);
   }, [open]);
@@ -118,12 +118,12 @@ function CreateAccessTokenDialog({ open, onOpenChange, onSuccess }: Props) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{t("setting.access-token-section.create-dialog.create-access-token")}</DialogTitle>
+          <DialogTitle>{t("setting.access-token.create-dialog.create-access-token")}</DialogTitle>
         </DialogHeader>
         {createdToken ? (
           <div className="flex flex-col gap-4">
             <div className="grid gap-2">
-              <Label>{t("setting.access-token-section.token")}</Label>
+              <Label>{t("setting.access-token.token")}</Label>
               <Textarea value={createdToken} readOnly rows={3} className="font-mono text-xs" />
             </div>
           </div>
@@ -131,19 +131,19 @@ function CreateAccessTokenDialog({ open, onOpenChange, onSuccess }: Props) {
           <div className="flex flex-col gap-4">
             <div className="grid gap-2">
               <Label htmlFor="description">
-                {t("setting.access-token-section.create-dialog.description")} <span className="text-destructive">*</span>
+                {t("setting.access-token.create-dialog.description")} <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="description"
                 type="text"
-                placeholder={t("setting.access-token-section.create-dialog.some-description")}
+                placeholder={t("setting.access-token.create-dialog.some-description")}
                 value={state.description}
                 onChange={handleDescriptionInputChange}
               />
             </div>
             <div className="grid gap-2">
               <Label>
-                {t("setting.access-token-section.create-dialog.expiration")} <span className="text-destructive">*</span>
+                {t("setting.access-token.create-dialog.expiration")} <span className="text-destructive">*</span>
               </Label>
               <RadioGroup value={state.expiration.toString()} onValueChange={handleRoleInputChange} className="flex flex-row gap-4">
                 {expirationOptions.map((option) => (

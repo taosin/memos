@@ -1,40 +1,77 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Memo, Visibility } from "@/types/proto/api/v1/memo_service_pb";
-import type { EditorRefActions } from "../Editor";
 import { cacheService, memoService } from "../services";
 import { useEditorContext } from "../state";
+import type { EditorController } from "../types/editorController";
 
 interface UseMemoInitOptions {
-  editorRef: React.RefObject<EditorRefActions | null>;
+  editorRef: React.RefObject<EditorController | null>;
   memo?: Memo;
   cacheKey?: string;
   username: string;
   autoFocus?: boolean;
   defaultVisibility?: Visibility;
+  defaultCreateTime?: Date;
 }
 
-export const useMemoInit = ({ editorRef, memo, cacheKey, username, autoFocus, defaultVisibility }: UseMemoInitOptions) => {
+export const useMemoInit = ({
+  editorRef,
+  memo,
+  cacheKey,
+  username,
+  autoFocus,
+  defaultVisibility,
+  defaultCreateTime,
+}: UseMemoInitOptions) => {
   const { actions, dispatch } = useEditorContext();
   const initializedRef = useRef(false);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
     if (initializedRef.current) return;
     initializedRef.current = true;
+    const key = cacheService.key(username, cacheKey);
 
     if (memo) {
-      dispatch(actions.initMemo(memoService.fromMemo(memo)));
+      const initialState = memoService.fromMemo(memo);
+      cacheService.clear(key);
+      dispatch(actions.initMemo(initialState));
     } else {
-      const cachedContent = cacheService.load(cacheService.key(username, cacheKey));
-      if (cachedContent) {
-        dispatch(actions.updateContent(cachedContent));
+      const cachedDraft = cacheService.loadDraft(key);
+      if (cachedDraft.content) {
+        dispatch(actions.setContent(cachedDraft.content));
+      }
+      if (cachedDraft.attachments.length > 0) {
+        dispatch(actions.setMetadata({ attachments: cachedDraft.attachments }));
       }
       if (defaultVisibility !== undefined) {
         dispatch(actions.setMetadata({ visibility: defaultVisibility }));
       }
+      if (defaultCreateTime) {
+        dispatch(actions.setTimestamps({ createTime: defaultCreateTime, updateTime: defaultCreateTime }));
+      }
     }
 
-    if (autoFocus) {
-      setTimeout(() => editorRef.current?.focus(), 100);
+    const cachedCursor = cacheService.loadCursor(key);
+    let restoreCursorTimer: ReturnType<typeof setTimeout> | undefined;
+    if (autoFocus || cachedCursor !== undefined) {
+      restoreCursorTimer = setTimeout(() => {
+        if (cachedCursor !== undefined) {
+          editorRef.current?.setCursor(cachedCursor);
+        }
+        if (autoFocus) {
+          editorRef.current?.focus();
+        }
+      }, 100);
     }
-  }, [memo, cacheKey, username, autoFocus, defaultVisibility, actions, dispatch, editorRef]);
+
+    setIsInitialized(true);
+    return () => {
+      if (restoreCursorTimer) {
+        clearTimeout(restoreCursorTimer);
+      }
+    };
+  }, [memo, cacheKey, username, autoFocus, defaultVisibility, defaultCreateTime, actions, dispatch, editorRef]);
+
+  return { isInitialized };
 };

@@ -1,39 +1,68 @@
 import { createContext, type ReactNode, useContext, useState } from "react";
 
-export type LayoutMode = "LIST" | "MASONRY";
+export type MemoTimeBasis = "create_time" | "update_time";
+
+/** Upper bound on feed columns, in display order. 1 = single reading column; 0 = as many as fit. */
+export const MAX_COLUMNS_VALUES = [1, 2, 3, 0] as const;
+export type MemoMaxColumns = (typeof MAX_COLUMNS_VALUES)[number];
+
+interface ViewState {
+  orderByTimeAsc: boolean;
+  timeBasis?: MemoTimeBasis;
+  sortTimeField?: MemoTimeBasis;
+  compactMode: boolean;
+  linkPreview: boolean;
+  maxColumns: MemoMaxColumns;
+}
 
 interface ViewContextValue {
   orderByTimeAsc: boolean;
-  layout: LayoutMode;
-  toggleSortOrder: () => void;
-  setLayout: (layout: LayoutMode) => void;
+  timeBasis: MemoTimeBasis;
+  compactMode: boolean;
+  linkPreview: boolean;
+  maxColumns: MemoMaxColumns;
+  setOrderByTimeAsc: (value: boolean) => void;
+  setTimeBasis: (field: MemoTimeBasis) => void;
+  setCompactMode: (value: boolean) => void;
+  setLinkPreview: (value: boolean) => void;
+  setMaxColumns: (value: MemoMaxColumns) => void;
 }
 
 const ViewContext = createContext<ViewContextValue | null>(null);
 
 const LOCAL_STORAGE_KEY = "memos-view-setting";
 
+const DEFAULT_VIEW_STATE: ViewState = { orderByTimeAsc: false, compactMode: false, linkPreview: true, maxColumns: 1 };
+
 export function ViewProvider({ children }: { children: ReactNode }) {
-  // Load initial state from localStorage
-  const getInitialState = () => {
+  const getInitialState = (): ViewState => {
     try {
       const cached = localStorage.getItem(LOCAL_STORAGE_KEY);
       if (cached) {
-        const data = JSON.parse(cached);
+        const data = JSON.parse(cached) as Partial<ViewState>;
+        const cachedTimeBasis = data.timeBasis ?? data.sortTimeField;
+        const timeBasis = cachedTimeBasis === "create_time" || cachedTimeBasis === "update_time" ? cachedTimeBasis : undefined;
+        const maxColumns = MAX_COLUMNS_VALUES.includes(data.maxColumns as MemoMaxColumns)
+          ? (data.maxColumns as MemoMaxColumns)
+          : DEFAULT_VIEW_STATE.maxColumns;
         return {
-          orderByTimeAsc: Boolean(data.orderByTimeAsc ?? false),
-          layout: (["LIST", "MASONRY"].includes(data.layout) ? data.layout : "LIST") as LayoutMode,
+          orderByTimeAsc: Boolean(data.orderByTimeAsc ?? DEFAULT_VIEW_STATE.orderByTimeAsc),
+          timeBasis,
+          compactMode: Boolean(data.compactMode ?? DEFAULT_VIEW_STATE.compactMode),
+          linkPreview: Boolean(data.linkPreview ?? DEFAULT_VIEW_STATE.linkPreview),
+          maxColumns,
         };
       }
     } catch (error) {
       console.warn("Failed to load view settings from localStorage:", error);
     }
-    return { orderByTimeAsc: false, layout: "LIST" as LayoutMode };
+    return { ...DEFAULT_VIEW_STATE };
   };
 
   const [viewState, setViewState] = useState(getInitialState);
+  const timeBasis = viewState.timeBasis ?? "create_time";
 
-  const persistToStorage = (newState: typeof viewState) => {
+  const persistToStorage = (newState: ViewState) => {
     try {
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(newState));
     } catch (error) {
@@ -41,28 +70,33 @@ export function ViewProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const toggleSortOrder = () => {
+  const updateState = (patch: Partial<ViewState> | ((prev: ViewState) => Partial<ViewState>)) => {
     setViewState((prev) => {
-      const newState = { ...prev, orderByTimeAsc: !prev.orderByTimeAsc };
+      const newState = { ...prev, ...(typeof patch === "function" ? patch(prev) : patch) };
       persistToStorage(newState);
       return newState;
     });
   };
 
-  const setLayout = (layout: LayoutMode) => {
-    setViewState((prev) => {
-      const newState = { ...prev, layout };
-      persistToStorage(newState);
-      return newState;
-    });
-  };
+  const setOrderByTimeAsc = (value: boolean) => updateState({ orderByTimeAsc: value });
+  const setTimeBasis = (field: MemoTimeBasis) => updateState({ timeBasis: field });
+  const setCompactMode = (value: boolean) => updateState({ compactMode: value });
+  const setLinkPreview = (value: boolean) => updateState({ linkPreview: value });
+  const setMaxColumns = (value: MemoMaxColumns) => updateState({ maxColumns: value });
 
   return (
     <ViewContext.Provider
       value={{
-        ...viewState,
-        toggleSortOrder,
-        setLayout,
+        orderByTimeAsc: viewState.orderByTimeAsc,
+        timeBasis,
+        compactMode: viewState.compactMode,
+        linkPreview: viewState.linkPreview,
+        maxColumns: viewState.maxColumns,
+        setOrderByTimeAsc,
+        setTimeBasis,
+        setCompactMode,
+        setLinkPreview,
+        setMaxColumns,
       }}
     >
       {children}
@@ -76,4 +110,11 @@ export function useView() {
     throw new Error("useView must be used within ViewProvider");
   }
   return context;
+}
+
+// Read the link-preview preference from deep inside the markdown renderer, which
+// can render outside a ViewProvider (tests, isolated previews). Defaults to
+// enabled when no provider is present, preserving the historical behavior.
+export function useLinkPreviewEnabled() {
+  return useContext(ViewContext)?.linkPreview ?? DEFAULT_VIEW_STATE.linkPreview;
 }

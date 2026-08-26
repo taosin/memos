@@ -1,20 +1,17 @@
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import { sortBy } from "lodash-es";
-import { ArchiveIcon, BellIcon, InboxIcon } from "lucide-react";
-import { useState } from "react";
-import Empty from "@/components/Empty";
+import { BellIcon } from "lucide-react";
 import MemoCommentMessage from "@/components/Inbox/MemoCommentMessage";
-import MobileHeader from "@/components/MobileHeader";
-import useMediaQuery from "@/hooks/useMediaQuery";
+import MemoMentionMessage from "@/components/Inbox/MemoMentionMessage";
+import Placeholder from "@/components/Placeholder";
+import { useAppSidebar } from "@/contexts/AppSidebarContext";
 import { useNotifications } from "@/hooks/useUserQueries";
-import { cn } from "@/lib/utils";
 import { UserNotification, UserNotification_Status, UserNotification_Type } from "@/types/proto/api/v1/user_service_pb";
 import { useTranslate } from "@/utils/i18n";
 
 const Inboxes = () => {
   const t = useTranslate();
-  const md = useMediaQuery("md");
-  const [filter, setFilter] = useState<"all" | "unread" | "archived">("all");
+  const { inboxFilter: filter } = useAppSidebar();
 
   // Fetch notifications with React Query
   const { data: fetchedNotifications = [] } = useNotifications();
@@ -30,11 +27,8 @@ const Inboxes = () => {
   });
 
   const unreadCount = allNotifications.filter((n) => n.status === UserNotification_Status.UNREAD).length;
-  const archivedCount = allNotifications.filter((n) => n.status === UserNotification_Status.ARCHIVED).length;
-
   return (
     <section className="@container w-full max-w-5xl min-h-full flex flex-col justify-start items-center sm:pt-3 md:pt-6 pb-8">
-      {!md && <MobileHeader />}
       <div className="w-full px-4 sm:px-6">
         <div className="w-full border border-border flex flex-col justify-start items-start rounded-xl bg-background text-foreground overflow-hidden">
           {/* Header */}
@@ -52,61 +46,21 @@ const Inboxes = () => {
             </div>
           </div>
 
-          {/* Filter Tabs */}
-          <div className="w-full px-4 py-2 border-b border-border bg-muted/30">
-            <div className="flex flex-row gap-1">
-              <button
-                onClick={() => setFilter("all")}
-                className={cn(
-                  "px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
-                  filter === "all"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground hover:bg-background/50",
-                )}
-              >
-                {t("common.all")} ({allNotifications.length})
-              </button>
-              <button
-                onClick={() => setFilter("unread")}
-                className={cn(
-                  "px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-1.5",
-                  filter === "unread"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground hover:bg-background/50",
-                )}
-              >
-                <InboxIcon className="w-3.5 h-auto" />
-                {t("inbox.unread")} ({unreadCount})
-              </button>
-              <button
-                onClick={() => setFilter("archived")}
-                className={cn(
-                  "px-3 py-1.5 text-sm font-medium rounded-md transition-colors flex items-center gap-1.5",
-                  filter === "archived"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground hover:bg-background/50",
-                )}
-              >
-                <ArchiveIcon className="w-3.5 h-auto" />
-                {t("common.archived")} ({archivedCount})
-              </button>
-            </div>
-          </div>
-
           {/* Notifications List */}
           <div className="w-full">
             {notifications.length === 0 ? (
-              <div className="w-full py-16 flex flex-col justify-center items-center">
-                <Empty />
-                <p className="mt-4 text-sm text-muted-foreground">
-                  {filter === "unread" ? t("inbox.no-unread") : filter === "archived" ? t("inbox.no-archived") : t("message.no-data")}
-                </p>
-              </div>
+              <Placeholder
+                variant="empty"
+                message={filter === "unread" ? t("inbox.no-unread") : filter === "archived" ? t("inbox.no-archived") : t("message.no-data")}
+              />
             ) : (
               <div className="flex flex-col">
                 {notifications.map((notification: UserNotification) => {
                   if (notification.type === UserNotification_Type.MEMO_COMMENT) {
                     return <MemoCommentMessage key={notification.name} notification={notification} />;
+                  }
+                  if (notification.type === UserNotification_Type.MEMO_MENTION) {
+                    return <MemoMentionMessage key={notification.name} notification={notification} />;
                   }
                   return null;
                 })}

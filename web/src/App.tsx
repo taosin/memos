@@ -1,7 +1,7 @@
+import { DirectionProvider } from "@base-ui/react/direction-provider";
 import { useEffect } from "react";
-import { Outlet } from "react-router-dom";
+import { Outlet, ScrollRestoration } from "react-router-dom";
 import { useInstance } from "./contexts/InstanceContext";
-import { MemoFilterProvider } from "./contexts/MemoFilterContext";
 import useNavigateTo from "./hooks/useNavigateTo";
 import { useUserLocale } from "./hooks/useUserLocale";
 import { useUserTheme } from "./hooks/useUserTheme";
@@ -12,7 +12,7 @@ const App = () => {
   const { profile: instanceProfile, profileLoaded, generalSetting: instanceGeneralSetting } = useInstance();
 
   // Apply user preferences reactively
-  useUserLocale();
+  const direction = useUserLocale();
   useUserTheme();
 
   // Clean up expired OAuth states on app initialization
@@ -20,13 +20,15 @@ const App = () => {
     cleanupExpiredOAuthState();
   }, []);
 
-  // Redirect to sign up page if instance not initialized (no admin account exists yet).
+  // Redirect to sign up page if the instance needs initial setup (no users yet).
+  // needsSetup is used instead of a missing admin so an instance that has lost its
+  // admins isn't mistaken for a fresh install (which would create a normal user).
   // Guard with profileLoaded so a fetch failure doesn't incorrectly trigger the redirect.
   useEffect(() => {
-    if (profileLoaded && !instanceProfile.admin) {
+    if (profileLoaded && instanceProfile.needsSetup) {
       navigateTo("/auth/signup");
     }
-  }, [profileLoaded, instanceProfile.admin, navigateTo]);
+  }, [profileLoaded, instanceProfile.needsSetup, navigateTo]);
 
   useEffect(() => {
     if (instanceGeneralSetting.additionalStyle) {
@@ -57,9 +59,10 @@ const App = () => {
   }, [instanceGeneralSetting.customProfile]);
 
   return (
-    <MemoFilterProvider>
+    <DirectionProvider direction={direction}>
       <Outlet />
-    </MemoFilterProvider>
+      <ScrollRestoration />
+    </DirectionProvider>
   );
 };
 

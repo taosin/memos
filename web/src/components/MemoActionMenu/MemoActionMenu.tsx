@@ -3,10 +3,13 @@ import {
   ArchiveRestoreIcon,
   BookmarkMinusIcon,
   BookmarkPlusIcon,
+  CheckCheckIcon,
   CopyIcon,
   Edit3Icon,
   FileTextIcon,
   LinkIcon,
+  ListChecksIcon,
+  ListRestartIcon,
   MoreVerticalIcon,
   TrashIcon,
 } from "lucide-react";
@@ -37,6 +40,8 @@ const MemoActionMenu = (props: MemoActionMenuProps) => {
   // Derived state
   const isComment = Boolean(memo.parent);
   const isArchived = memo.state === State.ARCHIVED;
+  const canMutateTasks = !readonly && !isArchived && Boolean(memo.property?.hasTaskList);
+  const hasOpenTasks = Boolean(memo.property?.hasIncompleteTasks);
 
   // Action handlers
   const {
@@ -45,20 +50,21 @@ const MemoActionMenu = (props: MemoActionMenuProps) => {
     handleToggleMemoStatusClick,
     handleCopyLink,
     handleCopyContent,
+    handleCheckAllTaskListItemsClick,
+    handleUncheckAllTaskListItemsClick,
     handleDeleteMemoClick,
     confirmDeleteMemo,
   } = useMemoActionHandlers({
     memo,
+    parentScope: props.parentScope,
     onEdit: props.onEdit,
     setDeleteDialogOpen,
   });
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="size-4">
-          <MoreVerticalIcon className="text-muted-foreground" />
-        </Button>
+      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="size-4" />}>
+        <MoreVerticalIcon className="text-muted-foreground" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" sideOffset={2}>
         {/* Edit actions (non-readonly, non-archived) */}
@@ -92,6 +98,26 @@ const MemoActionMenu = (props: MemoActionMenuProps) => {
               <DropdownMenuItem onClick={handleCopyContent}>
                 <FileTextIcon className="w-4 h-auto" />
                 {t("memo.copy-content")}
+              </DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        )}
+
+        {/* Task submenu (writable task memos) */}
+        {canMutateTasks && (
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <ListChecksIcon className="w-4 h-auto" />
+              {t("memo.task-actions.title")}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              <DropdownMenuItem disabled={!hasOpenTasks} onClick={handleCheckAllTaskListItemsClick}>
+                <CheckCheckIcon className="w-4 h-auto" />
+                {t("memo.task-actions.check-all")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleUncheckAllTaskListItemsClick}>
+                <ListRestartIcon className="w-4 h-auto" />
+                {t("memo.task-actions.uncheck-all")}
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>

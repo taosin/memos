@@ -8,10 +8,13 @@ import {
   HashIcon,
   LinkIcon,
   LucideIcon,
+  MapPinIcon,
   SearchIcon,
   XIcon,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { FilterFactor, getMemoFilterKey, MemoFilter, useMemoFilterContext } from "@/contexts/MemoFilterContext";
+import { cn } from "@/lib/utils";
 import { useTranslate } from "@/utils/i18n";
 
 interface FilterConfig {
@@ -42,19 +45,23 @@ const FILTER_CONFIGS: Record<FilterFactor, FilterConfig> = {
   },
   "property.hasLink": {
     icon: LinkIcon,
-    getLabel: (_, t) => t("filters.has-link"),
+    getLabel: (_, t) => t("memo.filters.has-link"),
   },
   "property.hasTaskList": {
     icon: CheckCircleIcon,
-    getLabel: (_, t) => t("filters.has-task-list"),
+    getLabel: (_, t) => t("memo.filters.has-task-list"),
   },
   "property.hasCode": {
     icon: CodeIcon,
-    getLabel: (_, t) => t("filters.has-code"),
+    getLabel: (_, t) => t("memo.filters.has-code"),
+  },
+  "property.hasLocation": {
+    icon: MapPinIcon,
+    getLabel: (_, t) => t("memo.filters.has-location"),
   },
 };
 
-const MemoFilters = () => {
+const MemoFilters = ({ className }: { className?: string }) => {
   const t = useTranslate();
   const { filters, removeFilter } = useMemoFilterContext();
 
@@ -75,7 +82,7 @@ const MemoFilters = () => {
   }
 
   return (
-    <div className="w-full mb-2 flex flex-row justify-start items-center flex-wrap gap-2">
+    <div className={cn("w-full flex flex-row justify-start items-center flex-wrap gap-2", className)}>
       {filters.map((filter) => {
         const config = FILTER_CONFIGS[filter.factor];
         const Icon = config?.icon;
@@ -87,13 +94,11 @@ const MemoFilters = () => {
           >
             {Icon && <Icon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
             <span className="text-foreground/80 font-medium max-w-32 truncate">{getFilterDisplayText(filter)}</span>
-            <button
-              onClick={() => handleRemoveFilter(filter)}
-              className="ml-0.5 -mr-1 p-0.5 text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 rounded-full transition-colors"
-              aria-label="Remove filter"
-            >
-              <XIcon className="w-3 h-3" />
-            </button>
+            <span className="ml-0.5 -mr-1">
+              <Button variant="ghost" size="icon-sm" onClick={() => handleRemoveFilter(filter)} aria-label="Remove filter">
+                <XIcon className="w-3 h-3" />
+              </Button>
+            </span>
           </div>
         );
       })}

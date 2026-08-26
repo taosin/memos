@@ -31,6 +31,10 @@ func NewDB(profile *profile.Profile) (store.Driver, error) {
 		return nil, errors.Wrap(err, "failed to register sqlite unicode lower function")
 	}
 
+	if err := ensureRegexpRegistered(); err != nil {
+		return nil, errors.Wrap(err, "failed to register sqlite regexp function")
+	}
+
 	// Connect to the database with some sane settings:
 	// - No shared-cache: it's obsolete; WAL journal mode is a better solution.
 	// - No foreign key constraints: it's currently disabled by default, but it's a
@@ -72,4 +76,16 @@ func (d *DB) IsInitialized(ctx context.Context) (bool, error) {
 		return false, errors.Wrap(err, "failed to check if database is initialized")
 	}
 	return exists, nil
+}
+
+// GetDatabaseSize returns the database size in bytes, or -1 if unavailable.
+func (d *DB) GetDatabaseSize(ctx context.Context) (int64, error) {
+	var pageCount, pageSize int64
+	if err := d.db.QueryRowContext(ctx, "PRAGMA page_count").Scan(&pageCount); err != nil {
+		return -1, errors.Wrap(err, "failed to read page_count")
+	}
+	if err := d.db.QueryRowContext(ctx, "PRAGMA page_size").Scan(&pageSize); err != nil {
+		return -1, errors.Wrap(err, "failed to read page_size")
+	}
+	return pageCount * pageSize, nil
 }

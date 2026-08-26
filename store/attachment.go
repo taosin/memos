@@ -9,7 +9,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/usememos/memos/internal/base"
-	"github.com/usememos/memos/plugin/storage/s3"
+	"github.com/usememos/memos/internal/storage"
 	storepb "github.com/usememos/memos/proto/gen/store"
 )
 
@@ -35,6 +35,9 @@ type Attachment struct {
 
 	// The related memo ID.
 	MemoID *int32
+	// Policy is present for transport-facing direct-link mutations. Drivers
+	// revalidate it in the same transaction as the attachment insert.
+	Policy *MemoWritePolicy
 
 	// Composed field
 	MemoUID *string
@@ -50,10 +53,14 @@ type FindAttachment struct {
 	MemoID         *int32
 	MemoIDList     []int32
 	HasRelatedMemo bool
-	StorageType    *storepb.AttachmentStorageType
 	Filters        []string
-	Limit          *int
-	Offset         *int
+	// Access applies memo-local authorization to linked attachments
+	// before pagination. Unlinked attachments are visible only to the active
+	// matching creator. Nil is reserved for trusted internal callers.
+	Access           *MemoAccessScope
+	Limit            *int
+	Offset           *int
+	SkipDefaultLimit bool
 }
 
 type UpdateAttachment struct {
@@ -62,8 +69,11 @@ type UpdateAttachment struct {
 	UpdatedTs *int64
 	Filename  *string
 	MemoID    *int32
-	Reference *string
 	Payload   *storepb.AttachmentPayload
+	// Policy is present for transport-facing updates. Drivers discover the
+	// current attachment binding and authorize any linked memo in the same
+	// transaction as the update.
+	Policy *MemoWritePolicy
 }
 
 type DeleteAttachment struct {
@@ -71,16 +81,73 @@ type DeleteAttachment struct {
 	MemoID *int32
 }
 
+const (
+	thumbnailCacheFolder = ".thumbnail_cache"
+	motionCacheFolder    = ".motion_cache"
+)
+
+type deleteAttachmentStorageFailpointKey struct{}
+type createAttachmentPolicyFailpointKey struct{}
+type createAttachmentPostCommitFailpointKey struct{}
+
+// ErrDeleteAttachmentStorageFailpoint is returned by the test-only attachment storage failpoint.
+var ErrDeleteAttachmentStorageFailpoint = errors.New("delete attachment storage failpoint")
+
+// ErrCreateAttachmentPostCommitFailpoint is returned after the test-only attachment create failpoint persists a row.
+var ErrCreateAttachmentPostCommitFailpoint = errors.New("create attachment post-commit failpoint")
+
+// WithDeleteAttachmentStorageFailpoint forces DeleteAttachmentStorage to return a failpoint error.
+func WithDeleteAttachmentStorageFailpoint(ctx context.Context) context.Context {
+	return context.WithValue(ctx, deleteAttachmentStorageFailpointKey{}, true)
+}
+
+// WithCreateAttachmentPolicyFailpoint forces a policy-bearing attachment create to fail before its database insert.
+func WithCreateAttachmentPolicyFailpoint(ctx context.Context) context.Context {
+	return context.WithValue(ctx, createAttachmentPolicyFailpointKey{}, true)
+}
+
+// WithCreateAttachmentPostCommitFailpoint forces CreateAttachment to return an error after its database insert succeeds.
+func WithCreateAttachmentPostCommitFailpoint(ctx context.Context) context.Context {
+	return context.WithValue(ctx, createAttachmentPostCommitFailpointKey{}, true)
+}
+
 func (s *Store) CreateAttachment(ctx context.Context, create *Attachment) (*Attachment, error) {
 	if !base.UIDMatcher.MatchString(create.UID) {
 		return nil, errors.New("invalid uid")
 	}
-	return s.driver.CreateAttachment(ctx, create)
+	if err := validateMemoWritePolicy(create.Policy); err != nil {
+		return nil, err
+	}
+	var (
+		attachment *Attachment
+		err        error
+	)
+	if create.Policy != nil {
+		if create.MemoID == nil {
+			return nil, errors.New("attachment write policy requires a memo")
+		}
+		if create.CreatorID != create.Policy.ActorUserID {
+			return nil, ErrMemoPermissionDenied
+		}
+		if shouldFailCreateAttachmentPolicy(ctx) {
+			return nil, ErrMemoSpaceMembershipRequired
+		}
+		attachment, err = s.driver.CreateAttachment(ctx, create)
+	} else {
+		attachment, err = s.driver.CreateAttachment(ctx, create)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if shouldFailCreateAttachmentPostCommit(ctx) {
+		return nil, ErrCreateAttachmentPostCommitFailpoint
+	}
+	return attachment, nil
 }
 
 func (s *Store) ListAttachments(ctx context.Context, find *FindAttachment) ([]*Attachment, error) {
 	// Set default limits to prevent loading too many attachments at once
-	shouldApplyDefaultLimit := find.Limit == nil && len(find.MemoIDList) == 0
+	shouldApplyDefaultLimit := find.Limit == nil && find.MemoID == nil && len(find.MemoIDList) == 0 && !find.SkipDefaultLimit
 	if shouldApplyDefaultLimit && find.GetBlob {
 		// When fetching blobs, we should be especially careful with limits
 		defaultLimit := 10
@@ -111,6 +178,15 @@ func (s *Store) UpdateAttachment(ctx context.Context, update *UpdateAttachment) 
 	if update.UID != nil && !base.UIDMatcher.MatchString(*update.UID) {
 		return errors.New("invalid uid")
 	}
+	if err := validateMemoWritePolicy(update.Policy); err != nil {
+		return err
+	}
+	if update.Policy != nil {
+		if update.MemoID != nil {
+			return errors.New("policy-bearing attachment updates cannot change memo binding")
+		}
+		return s.driver.UpdateAttachment(ctx, update)
+	}
 	return s.driver.UpdateAttachment(ctx, update)
 }
 
@@ -121,6 +197,77 @@ func (s *Store) DeleteAttachment(ctx context.Context, delete *DeleteAttachment) 
 	}
 	if attachment == nil {
 		return errors.New("attachment not found")
+	}
+
+	if err := s.DeleteAttachmentStorage(ctx, attachment); err != nil {
+		if attachment.StorageType == storepb.AttachmentStorageType_LOCAL {
+			return errors.Wrap(err, "failed to delete local file")
+		}
+		slog.Warn("Failed to delete attachment storage", slog.Any("err", err))
+	}
+
+	return s.driver.DeleteAttachment(ctx, delete)
+}
+
+func (s *Store) DeleteAttachments(ctx context.Context, attachments []*Attachment) error {
+	if len(attachments) == 0 {
+		return nil
+	}
+
+	deletes := make([]*DeleteAttachment, 0, len(attachments))
+	for _, attachment := range attachments {
+		if attachment == nil {
+			continue
+		}
+		deletes = append(deletes, &DeleteAttachment{ID: attachment.ID, MemoID: attachment.MemoID})
+	}
+	if len(deletes) == 0 {
+		return nil
+	}
+
+	if err := s.driver.DeleteAttachments(ctx, deletes); err != nil {
+		return err
+	}
+	return s.deleteAttachmentStorageSnapshots(ctx, attachments)
+}
+
+func (s *Store) deleteAttachmentStorageSnapshots(ctx context.Context, attachments []*Attachment) error {
+	instanceStorageSetting, instanceStorageSettingErr := s.getAttachmentStorageCleanupInstanceSetting(ctx, attachments)
+	for _, attachment := range attachments {
+		if attachment == nil {
+			continue
+		}
+		var err error
+		if instanceStorageSettingErr != nil && AttachmentNeedsInstanceStorageSetting(attachment) {
+			err = instanceStorageSettingErr
+		} else {
+			err = s.deleteAttachmentStorageImpl(ctx, attachment, instanceStorageSetting)
+		}
+		if err != nil {
+			if attachment.StorageType == storepb.AttachmentStorageType_LOCAL {
+				return errors.Wrap(err, "failed to delete local file")
+			}
+			slog.Warn("Failed to delete attachment storage", slog.Any("err", err))
+		}
+	}
+	return nil
+}
+
+func (s *Store) DeleteAttachmentStorage(ctx context.Context, attachment *Attachment) error {
+	return s.deleteAttachmentStorageImpl(ctx, attachment, nil)
+}
+
+// DeleteAttachmentStorageWithInstanceSetting deletes attachment storage using a preloaded instance storage setting.
+func (s *Store) DeleteAttachmentStorageWithInstanceSetting(ctx context.Context, attachment *Attachment, instanceStorageSetting *storepb.InstanceStorageSetting) error {
+	return s.deleteAttachmentStorageImpl(ctx, attachment, instanceStorageSetting)
+}
+
+func (s *Store) deleteAttachmentStorageImpl(ctx context.Context, attachment *Attachment, instanceStorageSetting *storepb.InstanceStorageSetting) error {
+	if attachment == nil {
+		return nil
+	}
+	if shouldFailDeleteAttachmentStorage(ctx) {
+		return ErrDeleteAttachmentStorageFailpoint
 	}
 
 	if attachment.StorageType == storepb.AttachmentStorageType_LOCAL {
@@ -135,7 +282,7 @@ func (s *Store) DeleteAttachment(ctx context.Context, delete *DeleteAttachment) 
 			}
 			return nil
 		}(); err != nil {
-			return errors.Wrap(err, "failed to delete local file")
+			return err
 		}
 	} else if attachment.StorageType == storepb.AttachmentStorageType_S3 {
 		if err := func() error {
@@ -143,30 +290,119 @@ func (s *Store) DeleteAttachment(ctx context.Context, delete *DeleteAttachment) 
 			if s3ObjectPayload == nil {
 				return errors.Errorf("No s3 object found")
 			}
-			instanceStorageSetting, err := s.GetInstanceStorageSetting(ctx)
-			if err != nil {
-				return errors.Wrap(err, "failed to get instance storage setting")
-			}
-			s3Config := s3ObjectPayload.S3Config
-			if s3Config == nil {
-				if instanceStorageSetting.S3Config == nil {
-					return errors.Errorf("S3 config is not found")
+			// Deletes resolve with the registry like reads do, so a legacy
+			// attachment picks up rotated credentials for its namespace instead
+			// of deleting with the stale embedded config.
+			if instanceStorageSetting == nil {
+				var err error
+				instanceStorageSetting, err = s.GetInstanceStorageSetting(ctx)
+				if err != nil {
+					if AttachmentNeedsInstanceStorageSetting(attachment) {
+						return errors.Wrap(err, "failed to get instance storage setting")
+					}
+					// The embedded config is sufficient on its own; keep the
+					// delete best-effort when the settings read fails.
+					instanceStorageSetting = nil
 				}
-				s3Config = instanceStorageSetting.S3Config
 			}
 
-			s3Client, err := s3.NewClient(ctx, s3Config)
+			resolvedStorage, err := ResolveStorage(instanceStorageSetting, s3ObjectPayload.StorageId, s3ObjectPayload.S3Config)
 			if err != nil {
-				return errors.Wrap(err, "Failed to create s3 client")
+				return errors.Wrap(err, "failed to resolve storage")
 			}
-			if err := s3Client.DeleteObject(ctx, s3ObjectPayload.Key); err != nil {
+			driver, err := s.StorageDriver(ctx, resolvedStorage)
+			if err != nil {
+				return errors.Wrap(err, "failed to create storage driver")
+			}
+			if err := driver.DeleteObject(ctx, s3ObjectPayload.Key); err != nil {
 				return errors.Wrap(err, "Failed to delete s3 object")
 			}
 			return nil
 		}(); err != nil {
-			slog.Warn("Failed to delete s3 object", slog.Any("err", err))
+			return err
 		}
 	}
 
-	return s.driver.DeleteAttachment(ctx, delete)
+	s.deleteAttachmentDerivedCaches(attachment)
+	return nil
+}
+
+func (s *Store) getAttachmentStorageCleanupInstanceSetting(ctx context.Context, attachments []*Attachment) (*storepb.InstanceStorageSetting, error) {
+	for _, attachment := range attachments {
+		if AttachmentNeedsInstanceStorageSetting(attachment) {
+			instanceStorageSetting, err := s.GetInstanceStorageSetting(ctx)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to get instance storage setting")
+			}
+			return instanceStorageSetting, nil
+		}
+	}
+	return nil, nil
+}
+
+// ResolveAttachmentS3Driver resolves the storage driver referenced by an S3
+// attachment payload, validating the payload and supplying the instance setting.
+func (s *Store) ResolveAttachmentS3Driver(ctx context.Context, attachment *Attachment) (storage.Driver, *storepb.AttachmentPayload_S3Object, error) {
+	if attachment == nil {
+		return nil, nil, errors.New("attachment is missing")
+	}
+	if attachment.Payload == nil {
+		return nil, nil, errors.New("attachment payload is missing")
+	}
+	s3Object := attachment.Payload.GetS3Object()
+	if s3Object == nil {
+		return nil, nil, errors.New("S3 object payload is missing")
+	}
+	if s3Object.Key == "" {
+		return nil, nil, errors.New("S3 object key is missing")
+	}
+
+	instanceStorageSetting, err := s.GetInstanceStorageSetting(ctx)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to get instance storage setting")
+	}
+	resolvedStorage, err := ResolveStorage(instanceStorageSetting, s3Object.StorageId, s3Object.S3Config)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to resolve storage")
+	}
+	driver, err := s.StorageDriver(ctx, resolvedStorage)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to create storage driver")
+	}
+	return driver, s3Object, nil
+}
+
+// AttachmentNeedsInstanceStorageSetting reports whether cleanup should load
+// the configured storage registry for an S3 attachment.
+func AttachmentNeedsInstanceStorageSetting(attachment *Attachment) bool {
+	if attachment == nil || attachment.StorageType != storepb.AttachmentStorageType_S3 {
+		return false
+	}
+	return attachment.Payload.GetS3Object() != nil
+}
+
+func (s *Store) deleteAttachmentDerivedCaches(attachment *Attachment) {
+	for _, cachePath := range []string{
+		filepath.Join(s.profile.Data, thumbnailCacheFolder, attachment.UID+".jpeg"),
+		filepath.Join(s.profile.Data, motionCacheFolder, attachment.UID+".mp4"),
+	} {
+		if err := os.Remove(cachePath); err != nil && !os.IsNotExist(err) {
+			slog.Warn("Failed to delete derived attachment cache", slog.String("path", cachePath), slog.Any("err", err))
+		}
+	}
+}
+
+func shouldFailDeleteAttachmentStorage(ctx context.Context) bool {
+	failpoint, ok := ctx.Value(deleteAttachmentStorageFailpointKey{}).(bool)
+	return ok && failpoint
+}
+
+func shouldFailCreateAttachmentPolicy(ctx context.Context) bool {
+	failpoint, ok := ctx.Value(createAttachmentPolicyFailpointKey{}).(bool)
+	return ok && failpoint
+}
+
+func shouldFailCreateAttachmentPostCommit(ctx context.Context) bool {
+	failpoint, ok := ctx.Value(createAttachmentPostCommitFailpointKey{}).(bool)
+	return ok && failpoint
 }

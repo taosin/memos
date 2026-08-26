@@ -1,14 +1,25 @@
-import { ArchiveIcon, CheckIcon, GlobeIcon, LogOutIcon, PaletteIcon, SettingsIcon, SquareUserIcon, User2Icon } from "lucide-react";
+import {
+  CheckIcon,
+  ChevronsUpDownIcon,
+  GlobeIcon,
+  InfoIcon,
+  LogOutIcon,
+  PaletteIcon,
+  SettingsIcon,
+  SquareUserIcon,
+  User2Icon,
+} from "lucide-react";
+import { useAppSidebar } from "@/contexts/AppSidebarContext";
 import { useAuth } from "@/contexts/AuthContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { useSSEConnectionStatus } from "@/hooks/useLiveMemoRefresh";
 import useNavigateTo from "@/hooks/useNavigateTo";
 import { useUpdateUserGeneralSetting } from "@/hooks/useUserQueries";
-import { locales } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { Routes } from "@/router";
-import { getLocaleDisplayName, getLocaleWithFallback, loadLocale, useTranslate } from "@/utils/i18n";
+import { getLocaleWithFallback, loadLocale, useTranslate } from "@/utils/i18n";
 import { getThemeWithFallback, loadTheme, THEME_OPTIONS } from "@/utils/theme";
+import { LocaleSearchList } from "./LocalePicker";
 import UserAvatar from "./UserAvatar";
 import {
   DropdownMenu,
@@ -29,6 +40,7 @@ const UserMenu = (props: Props) => {
   const { collapsed } = props;
   const t = useTranslate();
   const navigateTo = useNavigateTo();
+  const { setMobileOpen } = useAppSidebar();
   const currentUser = useCurrentUser();
   const { userGeneralSetting, refetchSettings, logout } = useAuth();
   const { mutate: updateUserGeneralSetting } = useUpdateUserGeneralSetting(currentUser?.name);
@@ -73,7 +85,7 @@ const UserMenu = (props: Props) => {
     try {
       // Then clear user-specific localStorage items
       // Preserve app-wide settings (theme, locale, view preferences, tag view settings)
-      const keysToPreserve = ["memos-theme", "memos-locale", "memos-view-setting", "tag-view-as-tree", "tag-tree-auto-expand"];
+      const keysToPreserve = ["memos-theme", "memos-locale", "memos-view-setting", "tag-view-as-tree"];
       const keysToRemove: string[] = [];
 
       for (let i = 0; i < localStorage.length; i++) {
@@ -92,65 +104,69 @@ const UserMenu = (props: Props) => {
     window.location.replace(Routes.AUTH);
   };
 
+  const navigateFromMenu = (path: string) => {
+    setMobileOpen(false);
+    navigateTo(path);
+  };
+
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild disabled={!currentUser}>
-        <div className={cn("w-auto flex flex-row justify-start items-center cursor-pointer text-foreground", collapsed ? "px-1" : "px-3")}>
+      <DropdownMenuTrigger
+        disabled={!currentUser}
+        className={cn(
+          "flex h-10 w-full min-w-0 cursor-pointer items-center justify-between gap-2 px-3 text-left text-foreground transition-colors hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50 data-popup-open:bg-sidebar-accent",
+          collapsed && "w-auto px-2",
+        )}
+      >
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           <div className="relative shrink-0">
             {currentUser?.avatarUrl ? (
-              <UserAvatar avatarUrl={currentUser?.avatarUrl} />
+              <UserAvatar className="size-6 rounded-md" avatarUrl={currentUser?.avatarUrl} />
             ) : (
-              <User2Icon className="w-6 mx-auto h-auto text-muted-foreground" />
+              <User2Icon className="mx-auto size-5 text-muted-foreground" />
             )}
             {sseStatus !== "connected" && (
               <Tooltip>
-                <TooltipTrigger asChild>
-                  <span
-                    className={cn(
-                      "absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background",
-                      sseStatus === "connecting" ? "bg-muted-foreground animate-pulse" : "bg-destructive",
-                    )}
-                  />
-                </TooltipTrigger>
-                <TooltipContent side="right">{t(`sse.${sseStatus}` as Parameters<typeof t>[0])}</TooltipContent>
+                <TooltipTrigger
+                  render={
+                    <span
+                      className={cn(
+                        "absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-background",
+                        sseStatus === "connecting" ? "bg-muted-foreground animate-pulse" : "bg-destructive",
+                      )}
+                    />
+                  }
+                />
+                <TooltipContent side="right">{t(`live-update.${sseStatus}` as Parameters<typeof t>[0])}</TooltipContent>
               </Tooltip>
             )}
           </div>
           {!collapsed && (
-            <span className="ml-2 text-lg font-medium text-foreground grow truncate">
+            <span className="min-w-0 flex-1 truncate text-left text-[13px] font-medium text-foreground">
               {currentUser?.displayName || currentUser?.username}
             </span>
           )}
         </div>
+        {!collapsed && <ChevronsUpDownIcon className="size-3.5 shrink-0 text-muted-foreground/70" strokeWidth={1.8} />}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
-        <DropdownMenuItem onClick={() => navigateTo(`/u/${encodeURIComponent(currentUser?.username ?? "")}`)}>
+        <DropdownMenuItem onClick={() => navigateFromMenu(`/u/${encodeURIComponent(currentUser?.username ?? "")}`)}>
           <SquareUserIcon className="size-4 text-muted-foreground" />
           {t("common.profile")}
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => navigateTo(Routes.ARCHIVED)}>
-          <ArchiveIcon className="size-4 text-muted-foreground" />
-          {t("common.archived")}
         </DropdownMenuItem>
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             <GlobeIcon className="size-4 text-muted-foreground" />
             {t("common.language")}
           </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent className="max-h-[90vh] overflow-y-auto">
-            {locales.map((locale) => (
-              <DropdownMenuItem key={locale} onClick={() => handleLocaleChange(locale)}>
-                {currentLocale === locale && <CheckIcon className="w-4 h-auto" />}
-                {currentLocale !== locale && <span className="w-4" />}
-                {getLocaleDisplayName(locale)}
-              </DropdownMenuItem>
-            ))}
+          <DropdownMenuSubContent className="max-h-[min(24rem,var(--available-height))] overflow-y-auto p-0">
+            <LocaleSearchList value={currentLocale} onChange={handleLocaleChange} className="w-64" />
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             <PaletteIcon className="size-4 text-muted-foreground" />
-            {t("setting.preference-section.theme")}
+            {t("setting.preference.theme")}
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
             {THEME_OPTIONS.map((option) => (
@@ -162,7 +178,11 @@ const UserMenu = (props: Props) => {
             ))}
           </DropdownMenuSubContent>
         </DropdownMenuSub>
-        <DropdownMenuItem onClick={() => navigateTo(Routes.SETTING)}>
+        <DropdownMenuItem onClick={() => navigateFromMenu(Routes.ABOUT)}>
+          <InfoIcon className="size-4 text-muted-foreground" />
+          {t("common.about")}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => navigateFromMenu(Routes.SETTING)}>
           <SettingsIcon className="size-4 text-muted-foreground" />
           {t("common.settings")}
         </DropdownMenuItem>

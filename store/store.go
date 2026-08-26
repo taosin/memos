@@ -1,9 +1,12 @@
 package store
 
 import (
+	"sync"
 	"time"
 
 	"github.com/usememos/memos/internal/profile"
+	"github.com/usememos/memos/internal/storage"
+	storepb "github.com/usememos/memos/proto/gen/store"
 	"github.com/usememos/memos/store/cache"
 )
 
@@ -12,6 +15,15 @@ type Store struct {
 	profile *profile.Profile
 	driver  Driver
 
+	userCreateMu   sync.Mutex
+	authConfigMu   sync.Mutex
+	refreshTokenMu sync.Mutex
+	patMu          sync.Mutex
+	memoViewMu     sync.Mutex
+
+	deploymentConfigMu sync.RWMutex
+	deploymentConfig   *deploymentConfiguration
+
 	// Cache settings
 	cacheConfig cache.Config
 
@@ -19,6 +31,17 @@ type Store struct {
 	instanceSettingCache *cache.Cache // cache for instance settings
 	userCache            *cache.Cache // cache for users
 	userSettingCache     *cache.Cache // cache for user settings
+
+	// storageDriverCache reuses object-storage clients across requests, keyed
+	// by the resolved configuration. Reset whenever the STORAGE setting changes.
+	storageDriverMu         sync.Mutex
+	storageDriverGeneration uint64
+	storageDriverCache      map[storageDriverCacheKey]storage.Driver
+}
+
+type deploymentConfiguration struct {
+	identityProviders map[string]*storepb.IdentityProvider
+	instanceSettings  map[storepb.InstanceSettingKey]*storepb.InstanceSetting
 }
 
 // New creates a new instance of Store.
@@ -38,6 +61,10 @@ func New(driver Driver, profile *profile.Profile) *Store {
 		instanceSettingCache: cache.New(cacheConfig),
 		userCache:            cache.New(cacheConfig),
 		userSettingCache:     cache.New(cacheConfig),
+		deploymentConfig: &deploymentConfiguration{
+			identityProviders: map[string]*storepb.IdentityProvider{},
+			instanceSettings:  map[storepb.InstanceSettingKey]*storepb.InstanceSetting{},
+		},
 	}
 
 	return store
@@ -45,6 +72,11 @@ func New(driver Driver, profile *profile.Profile) *Store {
 
 func (s *Store) GetDriver() Driver {
 	return s.driver
+}
+
+// GetDataDir returns the store data directory.
+func (s *Store) GetDataDir() string {
+	return s.profile.Data
 }
 
 func (s *Store) Close() error {

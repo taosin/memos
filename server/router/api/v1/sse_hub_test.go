@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -8,63 +9,126 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSSEHub_SubscribeUnsubscribe(t *testing.T) {
-	hub := NewSSEHub()
+func mustReceive(t *testing.T, ch <-chan []byte, within time.Duration) []byte {
+	t.Helper()
+	select {
+	case data, ok := <-ch:
+		require.True(t, ok, "SSE event channel closed before an event arrived")
+		return data
+	case <-time.After(within):
+		t.Fatal("timed out waiting for SSE event")
+		return nil
+	}
+}
 
+func mustNotReceive(t *testing.T, ch <-chan []byte, within time.Duration) {
+	t.Helper()
+	select {
+	case data, ok := <-ch:
+		if ok {
+			t.Fatalf("unexpected SSE event received: %s", data)
+		}
+	case <-time.After(within):
+	}
+}
+
+func TestSSEHubSubscribeUnsubscribe(t *testing.T) {
+	hub := NewSSEHub()
 	client := hub.Subscribe()
 	require.NotNil(t, client)
 	require.NotNil(t, client.events)
 
-	// Unsubscribe removes the client and closes the channel.
 	hub.Unsubscribe(client)
 
-	// Channel should be closed.
 	_, ok := <-client.events
-	assert.False(t, ok, "channel should be closed after Unsubscribe")
+	assert.False(t, ok, "event channel should be closed after unsubscribe")
+	_, ok = <-client.done
+	assert.False(t, ok, "done channel should be closed after unsubscribe")
 }
 
-func TestSSEHub_Broadcast(t *testing.T) {
+func TestSSEHubClose(t *testing.T) {
 	hub := NewSSEHub()
-	client := hub.Subscribe()
-	defer hub.Unsubscribe(client)
+	first := hub.Subscribe()
+	second := hub.Subscribe()
 
-	event := &SSEEvent{Type: SSEEventMemoCreated, Name: "memos/123"}
-	hub.Broadcast(event)
+	hub.Close()
+	hub.Close()
+
+	for _, ch := range []chan []byte{first.events, second.events} {
+		_, ok := <-ch
+		assert.False(t, ok, "event channel should be closed after hub close")
+	}
+	for _, ch := range []chan struct{}{first.done, second.done} {
+		_, ok := <-ch
+		assert.False(t, ok, "done channel should be closed after hub close")
+	}
+
+	late := hub.Subscribe()
+	_, ok := <-late.events
+	assert.False(t, ok, "late subscriber should be closed immediately")
+	hub.publishMemoChanged()
+}
+
+func TestSSEHubPublishMemoChangedBroadcastsToSubscribers(t *testing.T) {
+	hub := NewSSEHub()
+	first := hub.Subscribe()
+	defer hub.Unsubscribe(first)
+	second := hub.Subscribe()
+	defer hub.Unsubscribe(second)
+
+	hub.publishMemoChanged()
+
+	for _, client := range []*SSEClient{first, second} {
+		assert.Equal(t, memoChangedSSEFrame, string(mustReceive(t, client.events, time.Second)))
+	}
+}
+
+func TestSSEHubSlowClientIsDisconnected(t *testing.T) {
+	hub := NewSSEHub()
+	slow := hub.Subscribe()
+	defer hub.Unsubscribe(slow)
+
+	for range sseClientEventBufferSize + 1 {
+		hub.publishMemoChanged()
+	}
 
 	select {
-	case data := <-client.events:
-		assert.Contains(t, string(data), `"type":"memo.created"`)
-		assert.Contains(t, string(data), `"name":"memos/123"`)
-	case <-time.After(time.Second):
-		t.Fatal("expected to receive event within 1s")
+	case <-slow.done:
+	default:
+		t.Fatal("slow client should be disconnected after its event buffer fills")
 	}
+
+	received := 0
+	for range slow.events {
+		received++
+	}
+	assert.Equal(t, sseClientEventBufferSize, received)
 }
 
-func TestSSEHub_BroadcastMultipleClients(t *testing.T) {
+func TestSSEHubConcurrentAccess(t *testing.T) {
+	const (
+		workers    = 16
+		iterations = 100
+	)
 	hub := NewSSEHub()
-	c1 := hub.Subscribe()
-	defer hub.Unsubscribe(c1)
-	c2 := hub.Subscribe()
-	defer hub.Unsubscribe(c2)
 
-	event := &SSEEvent{Type: SSEEventMemoDeleted, Name: "memos/456"}
-	hub.Broadcast(event)
-
-	for _, ch := range []chan []byte{c1.events, c2.events} {
-		select {
-		case data := <-ch:
-			assert.Contains(t, string(data), "memo.deleted")
-			assert.Contains(t, string(data), "memos/456")
-		case <-time.After(time.Second):
-			t.Fatal("expected to receive event within 1s")
-		}
+	var wg sync.WaitGroup
+	for range workers {
+		wg.Go(func() {
+			for range iterations {
+				client := hub.Subscribe()
+				hub.publishMemoChanged()
+				select {
+				case <-client.events:
+				default:
+				}
+				hub.Unsubscribe(client)
+			}
+		})
 	}
-}
+	wg.Wait()
 
-func TestSSEEvent_JSON(t *testing.T) {
-	e := &SSEEvent{Type: SSEEventMemoUpdated, Name: "memos/789"}
-	data := e.JSON()
-	require.NotEmpty(t, data)
-	assert.Contains(t, string(data), `"type":"memo.updated"`)
-	assert.Contains(t, string(data), `"name":"memos/789"`)
+	hub.mu.RLock()
+	defer hub.mu.RUnlock()
+	assert.Empty(t, hub.clients)
 }

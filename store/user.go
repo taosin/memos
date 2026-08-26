@@ -2,7 +2,15 @@ package store
 
 import (
 	"context"
+	stderrors "errors"
+	"strconv"
+
+	"github.com/pkg/errors"
 )
+
+// ErrUserHasSpaceMembership blocks account deletion until its Space lifecycle
+// has been resolved explicitly.
+var ErrUserHasSpaceMembership = stderrors.New("user still has space memberships")
 
 // Role is the type of a role.
 type Role string
@@ -22,20 +30,6 @@ func (e Role) String() string {
 		return "USER"
 	}
 }
-
-const (
-	SystemBotID int32 = 0
-)
-
-var (
-	SystemBot = &User{
-		ID:       SystemBotID,
-		Username: "system_bot",
-		Role:     RoleAdmin,
-		Email:    "",
-		Nickname: "Bot",
-	}
-)
 
 type User struct {
 	ID int32
@@ -71,22 +65,33 @@ type UpdateUser struct {
 }
 
 type FindUser struct {
-	ID        *int32
+	ID     *int32
+	IDList []int32
+
+	UsernameList []string
+
 	RowStatus *RowStatus
 	Username  *string
 	Role      *Role
 	Email     *string
 	Nickname  *string
+	Search    *string
 
 	// Domain specific fields
 	Filters []string
 
 	// The maximum number of users to return.
 	Limit *int
+	// The offset of the returned users.
+	Offset *int
 }
 
 type DeleteUser struct {
 	ID int32
+}
+
+func userCacheKey(userID int32) string {
+	return strconv.Itoa(int(userID))
 }
 
 func (s *Store) CreateUser(ctx context.Context, create *User) (*User, error) {
@@ -95,8 +100,32 @@ func (s *Store) CreateUser(ctx context.Context, create *User) (*User, error) {
 		return nil, err
 	}
 
-	s.userCache.Set(ctx, string(user.ID), user)
+	s.userCache.Set(ctx, userCacheKey(user.ID), user)
 	return user, nil
+}
+
+// CreateUserIfNoUsers creates a user only when the instance has no users.
+// The in-process lock prevents concurrent first-user setup requests from
+// creating multiple admins in the same server process.
+func (s *Store) CreateUserIfNoUsers(ctx context.Context, create *User) (*User, bool, error) {
+	s.userCreateMu.Lock()
+	defer s.userCreateMu.Unlock()
+
+	limitOne := 1
+	users, err := s.driver.ListUsers(ctx, &FindUser{Limit: &limitOne})
+	if err != nil {
+		return nil, false, err
+	}
+	if len(users) > 0 {
+		return nil, false, nil
+	}
+
+	user, err := s.driver.CreateUser(ctx, create)
+	if err != nil {
+		return nil, false, err
+	}
+	s.userCache.Set(ctx, userCacheKey(user.ID), user)
+	return user, true, nil
 }
 
 func (s *Store) UpdateUser(ctx context.Context, update *UpdateUser) (*User, error) {
@@ -105,7 +134,7 @@ func (s *Store) UpdateUser(ctx context.Context, update *UpdateUser) (*User, erro
 		return nil, err
 	}
 
-	s.userCache.Set(ctx, string(user.ID), user)
+	s.userCache.Set(ctx, userCacheKey(user.ID), user)
 	return user, nil
 }
 
@@ -116,17 +145,14 @@ func (s *Store) ListUsers(ctx context.Context, find *FindUser) ([]*User, error) 
 	}
 
 	for _, user := range list {
-		s.userCache.Set(ctx, string(user.ID), user)
+		s.userCache.Set(ctx, userCacheKey(user.ID), user)
 	}
 	return list, nil
 }
 
 func (s *Store) GetUser(ctx context.Context, find *FindUser) (*User, error) {
 	if find.ID != nil {
-		if *find.ID == SystemBotID {
-			return SystemBot, nil
-		}
-		if cache, ok := s.userCache.Get(ctx, string(*find.ID)); ok {
+		if cache, ok := s.userCache.Get(ctx, userCacheKey(*find.ID)); ok {
 			user, ok := cache.(*User)
 			if ok {
 				return user, nil
@@ -143,15 +169,20 @@ func (s *Store) GetUser(ctx context.Context, find *FindUser) (*User, error) {
 	}
 
 	user := list[0]
-	s.userCache.Set(ctx, string(user.ID), user)
+	s.userCache.Set(ctx, userCacheKey(user.ID), user)
 	return user, nil
 }
 
-func (s *Store) DeleteUser(ctx context.Context, delete *DeleteUser) error {
-	err := s.driver.DeleteUser(ctx, delete)
+// DeleteUser removes a user and returns cache invalidation state. Deleting an
+// already-missing user is idempotent and returns an empty result.
+func (s *Store) DeleteUser(ctx context.Context, delete *DeleteUser) (*DeleteUserResult, error) {
+	result, err := s.driver.DeleteUser(ctx, delete)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	s.userCache.Delete(ctx, string(delete.ID))
-	return nil
+	if result == nil {
+		return nil, errors.New("unexpected nil delete user result")
+	}
+	s.deleteUserCache(ctx, delete.ID, result)
+	return result, nil
 }
